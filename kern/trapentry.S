@@ -48,7 +48,33 @@
  */
 
 
+/* from Dune: .if i <> 8 && (i <= 9 || i >= 15) && i <> 17 (then push 0) */
+
+TRAPHANDLER_NOEC(_intr_divide,   T_DIVIDE)
+TRAPHANDLER_NOEC(_intr_debug,    T_DEBUG)
+TRAPHANDLER_NOEC(_intr_nmi,      T_NMI)
+TRAPHANDLER_NOEC(_intr_brkpt,    T_BRKPT)
+TRAPHANDLER_NOEC(_intr_oflow,    T_OFLOW)
+TRAPHANDLER_NOEC(_intr_bound,    T_BOUND)
+TRAPHANDLER_NOEC(_intr_illop,    T_ILLOP)
+TRAPHANDLER_NOEC(_intr_device,   T_DEVICE)
+TRAPHANDLER(     _intr_dblflt,   T_DBLFLT)
+/* T_COPROC */
+TRAPHANDLER(     _intr_tss,      T_TSS)
+TRAPHANDLER(     _intr_segnp,    T_SEGNP)
+TRAPHANDLER(     _intr_stack,    T_STACK)
+TRAPHANDLER(     _intr_gpflt,    T_GPFLT)
+TRAPHANDLER(     _intr_pgflt,    T_PGFLT)
+/* T_RES */
+TRAPHANDLER_NOEC(_intr_fperr,    T_FPERR)
+TRAPHANDLER(     _intr_align,    T_ALIGN)
+TRAPHANDLER_NOEC(_intr_mchk,     T_MCHK)
+TRAPHANDLER_NOEC(_intr_simderr,  T_SIMDERR)
+
+TRAPHANDLER_NOEC(_intr_syscall,  T_SYSCALL)
+
 
 /*
  * Lab 3: Your code here for _alltraps
  */
+_alltraps:

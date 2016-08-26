@@ -18,6 +18,7 @@
 #include <inc/env.h>
 #include <inc/memlayout.h>
 #include <inc/syscall.h>
+#include <inc/trap.h>
 
 #define USED(x)     (void)(x)
 
@@ -38,11 +39,17 @@ char*   readline(const char *buf);
 
 /* syscall.c */
 void    sys_cputs(const char *string, size_t len);
-int sys_cgetc(void);
+int     sys_cgetc(void);
 envid_t sys_getenvid(void);
-int sys_env_destroy(envid_t);
+int     sys_env_destroy(envid_t);
 void *sys_vma_create(size_t);
-int sys_vma_destroy(void *va);
+void    sys_yield(void);
+int     sys_wait(envid_t);
+
+/* fork.c */
+#define PTE_SHARE               0x400
+envid_t fork(void);
+envid_t sfork(void);            /* Challenge! */
 
 /* File open modes */
 #define O_RDONLY    0x0000      /* open for reading only */

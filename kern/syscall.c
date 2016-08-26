@@ -10,6 +10,7 @@
 #include <kern/trap.h>
 #include <kern/syscall.h>
 #include <kern/console.h>
+#include <kern/sched.h>
 
 /*
  * Print a string to the system console.
@@ -80,6 +81,27 @@ static int sys_env_destroy(envid_t envid)
     return 0;
 }
 
+/*
+ * Deschedule current environment and pick a different one to run.
+ */
+static void sys_yield(void)
+{
+    sched_yield();
+}
+
+static int sys_wait(envid_t envid)
+{
+    /* LAB 5: Your code here */
+    return -1;
+}
+
+static int sys_fork(void)
+{
+    /* fork() that follows COW semantics */
+    /* LAB 5: Your code here */
+    return -1;
+}
+
 /* Dispatches to the correct kernel function, passing the arguments. */
 int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
         uint32_t a4, uint32_t a5)
@@ -93,6 +115,15 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
     panic("syscall not implemented");
 
     switch (syscallno) {
+    case SYS_cputs:
+        sys_cputs((char *)a1, a2);
+        return 0;
+    case SYS_cgetc:
+        return sys_cgetc();
+    case SYS_getenvid:
+        return sys_getenvid();
+    case SYS_env_destroy:
+        return sys_env_destroy(a1);
     default:
         return -E_NO_SYS;
     }
