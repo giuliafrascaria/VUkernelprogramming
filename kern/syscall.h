@@ -4,6 +4,9 @@
 # error "This is a JOS kernel header; user programs should not #include it"
 #endif
 
+/* Virtual Memory Area flags */
+#define MAP_POPULATE    0x0001
+
 #include <inc/syscall.h>
 
 int32_t syscall(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3,

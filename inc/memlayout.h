@@ -11,6 +11,7 @@
  * which are relevant to both the kernel and user-mode software.
  */
 
+#define MAX_VA 0xffffffff
 /* Global descriptor numbers */
 #define GD_KT     0x08     /* kernel text */
 #define GD_KD     0x10     /* kernel data */
@@ -185,6 +186,7 @@ struct page_info {
      * boot_alloc do not have valid reference count fields. */
 
     uint16_t pp_ref;
+		char pp_flags;
 };
 
 #endif /* !__ASSEMBLER__ */

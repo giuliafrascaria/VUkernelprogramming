@@ -14,8 +14,7 @@ void libmain(int argc, char **argv)
 {
     /* Set thisenv to point at our env structure in envs[].
      * LAB 3: Your code here. */
-    thisenv = 0;
-
+    thisenv = &((struct env*)UENVS)[ENVX(0)];
     /* Save the name of the program so that panic() can use it. */
     if (argc > 0)
         binaryname = argv[0];
@@ -26,4 +25,3 @@ void libmain(int argc, char **argv)
     /* Exit gracefully. */
     exit();
 }
-
