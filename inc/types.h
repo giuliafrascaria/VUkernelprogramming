@@ -71,7 +71,9 @@ typedef int32_t off_t;
 
 /* Return the offset of 'member' relative to the beginning of a struct type */
 #define offsetof(type, member)  ((size_t) (&((type*)0)->member))
-
 #define __always_inline         inline __attribute__((always_inline))
+#define container_of(ptr, type, member) ({                      \
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
 
 #endif /* !JOS_INC_TYPES_H */

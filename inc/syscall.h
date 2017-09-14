@@ -12,6 +12,8 @@ enum {
     SYS_yield,
     SYS_wait,
     SYS_fork,
+		SYS_vma_madvise,
+		SYS_vma_protect,
     NSYSCALLS
 };
 

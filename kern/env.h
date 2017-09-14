@@ -16,6 +16,8 @@ int  env_alloc(struct env **e, envid_t parent_id);
 void env_free(struct env *e);
 void env_create(uint8_t *binary, enum env_type type);
 void env_destroy(struct env *e); /* Does not return if e == curenv */
+void region_alloc(struct env *e, void *va, size_t len, int perm);
+void region_dealloc(struct env *e, void* va, size_t len);
 
 int  envid2env(envid_t envid, struct env **env_store, bool checkperm);
 /* The following two functions do not return */
