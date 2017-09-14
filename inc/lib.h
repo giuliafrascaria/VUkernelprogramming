@@ -47,6 +47,8 @@ int sys_vma_destroy(void *va, size_t size);
 void    sys_yield(void);
 int     sys_wait(envid_t);
 envid_t sys_fork(void);
+void sys_vma_madvise(void *addr, size_t size, int flags);
+void sys_vma_protect(void *addr, size_t size, int flags);
 
 /* fork.c */
 envid_t fork(void);
