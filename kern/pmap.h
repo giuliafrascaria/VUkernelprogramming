@@ -12,6 +12,7 @@
 extern char bootstacktop[], bootstack[];
 
 extern struct page_info *pages;
+extern struct page_info *page_free_list;
 extern size_t npages;
 
 
@@ -40,6 +41,13 @@ static inline void *_kaddr(const char *file, int line, physaddr_t pa)
     return (void *)(pa + KERNBASE);
 }
 
+
+void remove_page_free_entry(struct page_info *pp);
+static inline void add_page_free_entry(struct page_info *pp){
+	pp->pp_link = page_free_list;
+	pp->pp_flags = 0x0;
+	page_free_list = pp;
+}
 
 enum {
     /* For page_alloc, zero the returned physical page. */
