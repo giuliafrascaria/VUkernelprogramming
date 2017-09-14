@@ -6,6 +6,7 @@
 #include <inc/types.h>
 #include <inc/trap.h>
 #include <inc/memlayout.h>
+#include <inc/mm.h>
 
 typedef int32_t envid_t;
 
@@ -30,6 +31,7 @@ typedef int32_t envid_t;
 #define LOG2NENV        10
 #define NENV            (1 << LOG2NENV)
 #define ENVX(envid)     ((envid) & (NENV - 1))
+#define DEFAULT_ENV_TS 1000
 
 /* Values of env_status in struct env */
 enum {
@@ -47,6 +49,7 @@ enum env_type {
 
 struct env {
     struct trapframe env_tf;    /* Saved registers */
+		struct mm_struct env_mm;    /* Memory mapping structure */
     struct env *env_link;       /* Next free env */
     envid_t env_id;             /* Unique environment identifier */
     envid_t env_parent_id;      /* env_id of this env's parent */
@@ -54,27 +57,11 @@ struct env {
     unsigned env_status;        /* Status of the environment */
     uint32_t env_runs;          /* Number of times environment has run */
     int env_cpunum;             /* The CPU that the env is running on */
-
+		struct env *env_wait_list;      /* Linked list of all envs which wait for this env */
     /* Address space */
     pde_t *env_pgdir;           /* Kernel virtual address of page dir */
     struct vma *env_vmas;       /* Virtual memory areas of this env. */
-};
-
-/* Anonymous VMAs are zero-initialized whereas binary VMAs
- * are filled-in from the ELF binary.
- */
-enum {
-    VMA_UNUSED,
-    VMA_ANON,
-    VMA_BINARY,
-};
-
-struct vma {
-    int type;
-    void *va;
-    size_t len;
-    int perm;
-    /* LAB 4: You may add more fields here, if required. */
+		uint64_t env_ts;
 };
 
 #endif /* !JOS_INC_ENV_H */

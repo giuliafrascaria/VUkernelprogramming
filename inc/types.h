@@ -72,6 +72,24 @@ typedef int32_t off_t;
 /* Return the offset of 'member' relative to the beginning of a struct type */
 #define offsetof(type, member)  ((size_t) (&((type*)0)->member))
 
+
 #define __always_inline         inline __attribute__((always_inline))
 
+#define container_of(ptr, type, member) ({                      \
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+
+
+#define remove_entry_from_list(type, item, head, next_link) do{ \
+	type **head_list = &head;															\
+	type *entry = item;																		\
+	while(*head_list){ 																		\
+		if(entry == *head_list){														\
+			*head_list = ((type *)entry)->next_link;					\
+			((type *)entry)->next_link = NULL;								\
+			break; 																						\
+		} 																									\
+		head_list = &((*((type **)head_list))->next_link);	\
+						}																						\
+					}while(0)
 #endif /* !JOS_INC_TYPES_H */

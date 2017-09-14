@@ -17,6 +17,7 @@
 
 struct env *envs = NULL;            /* All environments */
 static struct env *env_free_list;   /* Free environment list */
+struct env *env_run_list;   				/* Free environment list */
                                     /* (linked by env->env_link) */
 
 #define ENVGENSHIFT 12      /* >= LOGNENV */
@@ -125,7 +126,13 @@ void env_init(void)
 {
     /* Set up envs array. */
     /* LAB 3: Your code here. */
-
+		env_free_list = 0;
+		for(ssize_t env_i = NENV - 1; env_i >= 0; --env_i){
+			envs[env_i].env_link = env_free_list;
+			envs[env_i].env_id = 0;
+			envs[env_i].env_type = ENV_FREE;
+			env_free_list = &envs[env_i];
+		}
     /* Per-CPU part of the initialization */
     env_init_percpu();
 }
@@ -187,12 +194,35 @@ static int env_setup_vm(struct env *e)
      */
 
     /* LAB 3: Your code here. */
-
+		e->env_pgdir = (pde_t*)page2kva(p);
+		memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+		memset(&e->env_pgdir[0], 0x0, PDX(UTOP) * sizeof(pde_t));
+		++(p->pp_ref);
     /* UVPT maps the env's own page table read-only.
      * Permissions: kernel R, user R */
     e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
 
     return 0;
+}
+
+int vma_init(struct env *e){
+	struct vma *tmp;
+	struct page_info *pp;
+	e->env_mm.vma_free_list = 0;
+	pp = page_alloc(ALLOC_ZERO);
+	++pp->pp_ref;
+	if(!pp)
+		return -E_NO_MEM;
+	e->env_mm.mm_common_vma = page2kva(pp);
+	e->env_mm.mm_vma = 0;
+	tmp = (struct vma*)e->env_mm.mm_common_vma;
+	for(size_t vma_i = 0; vma_i < PGSIZE / sizeof(struct vma); ++vma_i){
+		tmp->vma_mm = &e->env_mm;
+		tmp->vma_next = e->env_mm.vma_free_list;
+		e->env_mm.vma_free_list = tmp;
+		++tmp;
+	};
+	return 0;
 }
 
 /*
@@ -225,7 +255,6 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     /* Set the basic status variables. */
     e->env_parent_id = parent_id;
     e->env_type = ENV_TYPE_USER;
-    e->env_status = ENV_RUNNABLE;
     e->env_runs = 0;
 
     /*
@@ -254,12 +283,16 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
 
     /* Enable interrupts while in user mode.
      * LAB 5: Your code here. */
-
+		 e->env_tf.tf_eflags = FL_IF;
 
     /* commit the allocation */
-    env_free_list = e->env_link;
-    *newenv_store = e;
+    remove_entry_from_list(struct env, e, env_free_list, env_link);
 
+		*newenv_store = e;
+		if(vma_init(e) < 0){
+			env_destroy(e);
+			return -E_NO_MEM;
+		}
     cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
     return 0;
 }
@@ -271,8 +304,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
  * Pages should be writable by user and kernel.
  * Panic if any allocation attempt fails.
  */
-static void region_alloc(struct env *e, void *va, size_t len)
-{
+void region_alloc(struct env *e, void *va, size_t len, int perm){
     /*
      * LAB 3: Your code here.
      * (But only if you need it for load_icode.)
@@ -282,6 +314,28 @@ static void region_alloc(struct env *e, void *va, size_t len)
      *   You should round va down, and round (va + len) up.
      *   (Watch out for corner-cases!)
      */
+		 struct page_info *pp;
+		 size_t page_number;
+		 va = ROUNDDOWN(va, PGSIZE);
+		 len = ROUNDUP(len, PGSIZE);
+		 page_number = len / PGSIZE;
+		 for(int page_i = 0 ; page_i < page_number; ++page_i){
+			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
+			 if(!pp)
+			 	goto no_memory;
+			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, perm);
+		 	}
+			goto release;
+	no_memory:
+			panic("Cannot allocate new region for env %08x", e->env_id);
+	release:
+			return;
+}
+
+void region_dealloc(struct env *e, void* va, size_t len){
+	for(size_t page_i = 0; page_i < len; page_i += PGSIZE){
+		page_remove(e->env_pgdir, va + page_i);
+	}
 }
 
 /*
@@ -337,19 +391,35 @@ static void load_icode(struct env *e, uint8_t *binary)
      */
 
     /* LAB 3: Your code here. */
+  	struct elf_proghdr *ph, *eph;
+		struct page_info *p;
+		struct elf *elf = (struct elf*) binary;
+
+		if(elf->e_magic != ELF_MAGIC)
+			panic(" Incorrect ELF structure in env");
+
+		ph = (struct elf_proghdr *) ((uint8_t *) elf + elf->e_phoff);
+		eph = ph + elf->e_phnum;
+		for (; ph < eph; ++ph){
+			if(ph->p_type != ELF_PROG_LOAD)
+				continue;
+			do_map(&e->env_mm, binary + ph->p_offset, ph->p_filesz, (void*)ph->p_va, ph->p_memsz, PROT_EXEC | PROT_READ, VMA_BINARY);
+		}
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
-
+		//region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
+		do_map(&e->env_mm, NULL, 0, (void*)USTACKTOP - PGSIZE, PGSIZE, PROT_READ | PROT_WRITE, VMA_ANON);
+		e->env_tf.tf_eip = elf->e_entry;
     /* LAB 3: Your code here. */
 
 
     /* vmatest binary uses the following */
     /* 1. Map one RO page of VMA for UTEMP at virtual address UTEMP.
      * 2. Map one RW page of VMA for UTEMP+PGSIZE at virtual address UTEMP. */
-
+		 do_map(&e->env_mm, NULL, 0, (void*)UTEMP, PGSIZE, PROT_READ, VMA_ANON);
+		 do_map(&e->env_mm, NULL, 0, (void*)UTEMP + PGSIZE, PGSIZE, PROT_WRITE | PROT_READ, VMA_ANON);
     /* LAB 4: Your code here. */
-
 }
 
 /*
@@ -362,6 +432,14 @@ static void load_icode(struct env *e, uint8_t *binary)
 void env_create(uint8_t *binary, enum env_type type)
 {
     /* LAB 3: Your code here. */
+		struct env *env;
+		if(env_alloc(&env, 0) < 0)
+			panic("Cannot create first user-mode environment");
+		env->env_status = ENV_RUNNABLE;
+		env->env_link = env_run_list;
+		env_run_list = env;
+		env->env_type = type;
+		load_icode(env, binary);
 }
 
 /*
@@ -409,14 +487,21 @@ void env_free(struct env *e)
     pa = PADDR(e->env_pgdir);
     e->env_pgdir = 0;
     page_decref(pa2page(pa));
-
     /* Free VMA list. */
-    pa = PADDR(e->env_vmas);
-    e->env_vmas = 0;
+    pa = PADDR(e->env_mm.mm_common_vma);
+    e->env_mm.mm_common_vma = 0;
     page_decref(pa2page(pa));
+		/* Free all waiting envs */
+		struct env *tmp = e->env_wait_list;
+		while(tmp){
+			struct env *next = tmp->env_link;
+			dettach_wait(tmp, e);
+			tmp = next;
+		}
 
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
+		remove_entry_from_list(struct env, e, env_run_list, env_link);
     e->env_link = env_free_list;
     env_free_list = e;
 }
@@ -492,9 +577,87 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
-
+		 if(curenv && curenv->env_status == ENV_RUNNING)
+		 	curenv->env_status = ENV_RUNNABLE;
+		 curenv = e;
+		 curenv->env_status = ENV_RUNNING;
+		 ++curenv->env_runs;
+		 lcr3(PADDR(curenv->env_pgdir));
+		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
-
-    panic("env_run not yet implemented");
 }
 
+void __protect_cow(pde_t *pgdir){
+	for(size_t pg_i = 0; pg_i <= PDX(UTOP - PGSIZE) + 1; ++pg_i){
+		for(size_t tb_i = 0; tb_i < NPTENTRIES; ++tb_i){
+			struct page_info *pp;
+			pte_t *pte;
+			void *va = (void*)(pg_i << 22 | tb_i << 12);
+			if(va > (void*)(UTOP - PGSIZE))
+				break; // End of User space
+			pte = pgdir_walk(pgdir, va, 0);
+			if(pte && (*pte & PTE_P)){
+				pp = page_lookup(pgdir, va, NULL);
+				++pp->pp_ref;
+				*pte &= ~PTE_W;
+				tlb_invalidate(pgdir, va);
+			}
+		}
+	}
+}
+
+void __copy_pgdir(pde_t *child, pde_t *parent){
+	for(size_t pg_i = 0; pg_i <= PDX(UTOP - PGSIZE); ++pg_i){
+		void *va = (void*)(pg_i << 22);
+		struct page_info *pp;
+		pte_t *pte = pgdir_walk(parent, va, 0);
+		if(!pte)
+			continue;
+		size_t pg_size = parent[pg_i] & PTE_PS? HUGE_PGSIZE : PGSIZE;
+		int pg_flags =  ALLOC_ZERO | ALLOC_PREMAPPED | (parent[pg_i] & PTE_PS? ALLOC_HUGE : 0);
+		pp = page_alloc(pg_flags);
+		if(!pp)
+			panic("Cannot allocate memory for new process");
+		memcpy(page2kva(pp), pte, pg_size);
+		child[pg_i] = page2pa(pp) | (parent[pg_i] & 0xFFF);
+		}
+}
+
+void __copy_vma(struct mm_struct *child, struct mm_struct *parent){
+		struct vma *vma = parent->mm_vma;
+		while(vma){
+			do_map(child, vma->vma_file, vma->vma_bin_filesz, vma->vma_bin_va, vma->vma_len, vma->vma_prot, vma->vma_type);
+			vma = vma->vma_next;
+		}
+}
+
+envid_t copy_env(struct env *parent, int flags){
+	// Still don't have flags, but keeping them for future
+	struct env *child;
+	if(env_alloc(&child, parent->env_id) < 0)
+		return -E_NO_MEM;
+	__protect_cow(parent->env_pgdir);
+	__copy_pgdir(child->env_pgdir, parent->env_pgdir);
+	__copy_vma(&child->env_mm, &parent->env_mm);
+	child->env_tf = parent->env_tf;
+	child->env_tf.tf_regs.reg_eax = 0; // Return value from fork for child process
+	child->env_link = env_run_list;
+	env_run_list = child;
+	child->env_status = ENV_RUNNABLE;
+	return child->env_id;
+}
+
+
+void attach_wait(struct env *cur, struct env *attach_to){
+	cur->env_status = ENV_NOT_RUNNABLE;
+	remove_entry_from_list(struct env, cur, env_run_list, env_link);
+	cur->env_link = attach_to->env_wait_list;
+	attach_to->env_wait_list = cur;
+}
+
+void dettach_wait(struct env *cur, struct env *dettach_from){
+	remove_entry_from_list(struct env, cur, dettach_from->env_wait_list, env_link);
+	cur->env_link = env_run_list;
+	env_run_list = cur;
+	cur->env_status = ENV_RUNNABLE;
+}

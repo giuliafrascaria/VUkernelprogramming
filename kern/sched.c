@@ -26,7 +26,7 @@ void sched_yield(void)
      * choose that environment.
      *
      * Never choose an environment that's currently running (on
-     * another CPU, if we had, ie., env_status == ENV_RUNNING). 
+     * another CPU, if we had, ie., env_status == ENV_RUNNING).
      * If there are
      * no runnable environments, simply drop through to the code
      * below to halt the cpu.
@@ -34,8 +34,29 @@ void sched_yield(void)
      * LAB 5: Your code here.
      */
 
-    /* sched_halt never returns */
-    sched_halt();
+		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
+
+		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
+			 env = curenv; // Continue doing current env
+
+		 while(env){
+			 	if(env == curenv)
+					goto run;
+				//  As far as env - is located in env_run list it can has either ENV_RUNNING or ENV_RUNNABLE status
+				int status = xchg(&env->env_status, ENV_RUNNING);
+			 	if( status == ENV_RUNNABLE)
+					goto run;
+
+				if(env->env_link)
+					env = env->env_link;
+				else
+					env = env_run_list;
+		 }
+		 /* sched_halt never returns */
+		 sched_halt();
+		run:
+			env->env_ts = read_tsc();
+			env_run(env);
 }
 
 /*
@@ -82,4 +103,3 @@ void sched_halt(void)
         "hlt\n"
     : : "a" (thiscpu->cpu_ts.ts_esp0));
 }
-

@@ -14,6 +14,7 @@ struct env;
 extern char bootstacktop[], bootstack[];
 
 extern struct page_info *pages;
+extern struct page_info *page_free_list;
 extern size_t npages;
 
 extern pde_t *kern_pgdir;
@@ -45,6 +46,11 @@ static inline void *_kaddr(const char *file, int line, physaddr_t pa)
     return (void *)(pa + KERNBASE);
 }
 
+static inline void add_page_free_entry(struct page_info *pp){
+	pp->pp_link = page_free_list;
+	pp->pp_flags = 0x0;
+	page_free_list = pp;
+}
 
 enum {
     /* For page_alloc, zero the returned physical page. */
@@ -68,6 +74,8 @@ int page_insert(pde_t *pgdir, struct page_info *pp, void *va, int perm);
 void page_remove(pde_t *pgdir, void *va);
 struct page_info *page_lookup(pde_t *pgdir, void *va, pte_t **pte_store);
 void page_decref(struct page_info *pp);
+
+void boot_map_region(pde_t*, uintptr_t, size_t, physaddr_t, int);
 
 void tlb_invalidate(pde_t *pgdir, void *va);
 
