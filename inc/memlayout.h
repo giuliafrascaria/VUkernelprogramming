@@ -11,6 +11,7 @@
  * which are relevant to both the kernel and user-mode software.
  */
 
+#define MAX_VA 0xffffffff
 /* Global descriptor numbers */
 #define GD_KT     0x08     /* kernel text */
 #define GD_KD     0x10     /* kernel data */
