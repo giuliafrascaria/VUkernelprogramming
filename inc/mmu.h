@@ -48,6 +48,7 @@
 #define NPTENTRIES  1024        /* page table entries per page table */
 
 #define PGSIZE      4096        /* bytes mapped by a page */
+#define HUGE_PGSIZE (1024 * PGSIZE) /* bytes mapped by a huge page */
 #define PGSHIFT     12      /* log2(PGSIZE) */
 
 #define PTSIZE      (PGSIZE*NPTENTRIES) /* bytes mapped by a page directory entry */
