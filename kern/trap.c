@@ -2,6 +2,7 @@
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>
+#include <inc/mm.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -74,7 +75,26 @@ void trap_init(void)
     extern struct segdesc gdt[];
 
     /* LAB 3: Your code here. */
+		SETGATE(idt[T_DIVIDE], 1, GD_KT, devide_zero_intr, 0);
+		SETGATE(idt[T_DEBUG], 1, GD_KT, debug_exception_intr, 0);
+		SETGATE(idt[T_NMI], 0, GD_KT, non_maskable_intr, 0);
+		SETGATE(idt[T_BRKPT], 1, GD_KT, break_point_intr, 3);
+		SETGATE(idt[T_OFLOW], 1, GD_KT, overflow_intr, 0);
+		SETGATE(idt[T_BOUND], 0, GD_KT, bound_range_exceeded_intr, 0);
+		SETGATE(idt[T_ILLOP], 0, GD_KT, invalid_opcode_intr, 0);
+		SETGATE(idt[T_DEVICE], 0, GD_KT, device_not_avail_intr, 0);
+		SETGATE(idt[T_DBLFLT], 0, GD_KT, double_fault_intr, 0);
+		SETGATE(idt[T_TSS], 0, GD_KT, invalid_tss_intr, 0);
+		SETGATE(idt[T_SEGNP], 0, GD_KT, segment_not_present_intr, 0);
+		SETGATE(idt[T_STACK], 0, GD_KT, stack_segment_fault_intr, 0);
+		SETGATE(idt[T_GPFLT], 0, GD_KT, general_protection_intr, 0);
+		SETGATE(idt[T_PGFLT], 0, GD_KT, page_fault_intr, 0);
+		SETGATE(idt[T_FPERR], 0, GD_KT, fpu_excpt_intr, 0);
+		SETGATE(idt[T_ALIGN], 0, GD_KT, aligment_check_intr, 0);
+		SETGATE(idt[T_MCHK], 0, GD_KT, machine_check_intr, 0);
+		SETGATE(idt[T_SIMDERR], 0, GD_KT, smid_excpt_intr, 0);
 
+		SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call_intr, 3);
     /* Per-CPU setup */
     trap_init_percpu();
 }
@@ -191,6 +211,19 @@ static void trap_dispatch(struct trapframe *tf)
      */
 
     /* Unexpected trap: The user process or the kernel has a bug. */
+
+		if(tf->tf_trapno == T_PGFLT){
+			page_fault_handler(tf);
+			return;
+		} else if( tf->tf_trapno == T_BRKPT){
+			breakpoint_handler(tf);
+			return;
+		} else if(tf->tf_trapno == T_SYSCALL){
+			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+			return;
+		}
+
+		/* Unexpected trap: The user process or the kernel has a bug. */
     print_trapframe(tf);
     if (tf->tf_cs == GD_KT)
         panic("unhandled trap in kernel");
@@ -259,24 +292,49 @@ void trap(struct trapframe *tf)
         sched_yield();
 }
 
+void breakpoint_handler(struct trapframe *tf){
+	char *buf;
+	monitor(tf);
+	// while(1){
+	// 	buf = readline("DBG> ");
+	// 	if(buf && !strcmp(buf, "printframe"))
+	// 		print_trapframe(tf);
+	// 	if(buf && !strcmp(buf, "kill"))
+	// 		env_destroy(curenv);
+	// 	else if(buf && !strcmp(buf, "continue")){
+	// 		//++tf->tf_eip;
+	// 		cprintf("NEW EIP = %p\n", tf->tf_eip);
+	// 		return;
+	// 	}
+	// 	else
+	// 		cprintf("GDB> Unknown command for debugger\n");
+	// }
+}
 
 void page_fault_handler(struct trapframe *tf)
 {
     uint32_t fault_va;
+		struct vma *vma;
+		/* Read processor's CR2 register to find the faulting address */
+	  fault_va = rcr2();
 
-    /* Read processor's CR2 register to find the faulting address */
-    fault_va = rcr2();
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+				curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
 
-    /* Handle kernel-mode page faults. */
+		if(tf->tf_cs == GD_KT)
+			panic("Kernel space page fault");
 
-    /* LAB 3: Your code here. */
+		if(fault_va >= KERNBASE){
+		  env_destroy(curenv);
+			panic("Trying to access kernel space from userspace");
+		}
+		if(tf->tf_err & 1) // protection fault
+			env_destroy(curenv);
 
-    /* We've already handled kernel-mode exceptions, so if we get here, the page
-     * fault happened in user mode. */
+		if(!vma_map(&(curenv->env_mm), (void*)fault_va)) // found existing vma, need to map it
+			return;
 
     /* Destroy the environment that caused the fault. */
-    cprintf("[%08x] user fault va %08x ip %08x\n",
-        curenv->env_id, fault_va, tf->tf_eip);
-    print_trapframe(tf);
     env_destroy(curenv);
 }
