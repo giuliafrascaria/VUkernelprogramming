@@ -67,6 +67,9 @@ void trap_init(void)
 
     /* LAB 3: Your code here. */
 
+    //we need to set the gate and trap handler for every exception, I think
+
+
     /* Per-CPU setup */
     trap_init_percpu();
 }

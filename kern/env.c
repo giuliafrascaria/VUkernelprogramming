@@ -120,7 +120,9 @@ void env_init(void)
 {
     /* Set up envs array. */
     /* LAB 3: Your code here. */
-    for (int i = 0; i < NENV; i++)
+
+    //they need to be in the same order, insert in reverse order
+    for (int i = NENV -1; i >= 0 ; i--)
     {
         envs[i].env_id = 0;
         envs[i].env_link = env_free_list;
@@ -169,6 +171,11 @@ static int env_setup_vm(struct env *e)
     if (!(p = page_alloc(ALLOC_ZERO)))
         return -E_NO_MEM;
 
+
+
+
+
+
     /*
      * Now, set e->env_pgdir and initialize the page directory.
      *
@@ -186,11 +193,30 @@ static int env_setup_vm(struct env *e)
      *    - The functions in kern/pmap.h are handy.
      */
 
+     //blueprint for this code: lab 2 VM layout in pmap.c
+
     /* LAB 3: Your code here. */
 
+    p->pp_ref = p->pp_ref + 1;//page in use, increase refcount for env free
+    e->env_pgdir = (pte_t *) page2kva(p);//save as page directory for the current environment
+
+    //space above UVPT = see memlayout.h
+    //same structure as kernel init... do I copy?
+
+    //include not found for this, what am i missing
+    //boot_map_region(e->env_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
+    //boot_map_region(e->env_pgdir, KERNBASE, MAX_VA - KERNBASE, 0x0, PTE_W);
+
+    memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+    //not quite sure it is right, am I not mapping references to pages below UVPT as well
+
+    //this should be all that is above UVPT
     /* UVPT maps the env's own page table read-only.
      * Permissions: kernel R, user R */
+
     e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
+
+
 
     return 0;
 }
