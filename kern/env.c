@@ -304,6 +304,26 @@ static void region_alloc(struct env *e, void *va, size_t len)
      *   You should round va down, and round (va + len) up.
      *   (Watch out for corner-cases!)
      */
+
+     //total number of pages to allocate
+     int env_pages = ROUNDUP(len, PGSIZE);
+     struct page_info *pg;
+
+     for(int i = 0; i < env_pages; i++)
+     {
+       //allocate physical page and map in VM for the environment
+       pg = page_alloc(0);
+       if(pg == NULL)
+       {
+         //panic
+         panic("physical memory alloc failed for env\n");
+       }
+       else
+       {
+         //map in virtual memory with page insert
+         cprintf("region alloc not yet completed\n");
+       }
+     }
 }
 
 /*
