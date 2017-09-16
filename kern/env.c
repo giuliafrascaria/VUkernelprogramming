@@ -307,6 +307,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
 
      //total number of pages to allocate
      int env_pages = ROUNDUP(len, PGSIZE);
+     void * va_align = ROUNDDOWN(va, PGSIZE);
      struct page_info *pg;
 
      for(int i = 0; i < env_pages; i++)
@@ -321,7 +322,10 @@ static void region_alloc(struct env *e, void *va, size_t len)
        else
        {
          //map in virtual memory with page insert
-         cprintf("region alloc not yet completed\n");
+         if(page_insert(e->env_pgdir, pg, va_align + i*PGSIZE, PTE_P | PTE_U) == -E_NO_MEM)
+         {
+           panic("physical memory alloc failed 2\n");
+         }
        }
      }
 }
