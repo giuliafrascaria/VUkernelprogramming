@@ -306,8 +306,9 @@ static void region_alloc(struct env *e, void *va, size_t len)
      */
 
      //total number of pages to allocate
-     int env_pages = ROUNDUP(len, PGSIZE);
      void * va_align = ROUNDDOWN(va, PGSIZE);
+     int env_pages = ROUNDUP(len + va - va_align, PGSIZE)/PGSIZE; //i think I need some kind of offset here
+
      struct page_info *pg;
 
      for(int i = 0; i < env_pages; i++)
@@ -322,7 +323,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
        else
        {
          //map in virtual memory with page insert
-         if(page_insert(e->env_pgdir, pg, va_align + i*PGSIZE, PTE_P | PTE_U) == -E_NO_MEM)
+         if(page_insert(e->env_pgdir, pg, va_align + i*PGSIZE, PTE_P | PTE_U | PTE_W) == -E_NO_MEM)
          {
            panic("physical memory alloc failed 2\n");
          }
@@ -383,11 +384,35 @@ static void load_icode(struct env *e, uint8_t *binary)
      */
 
     /* LAB 3: Your code here. */
+    struct elf *header = (struct elf *) binary;
+    struct elf_proghdr *ph, *eph;
 
-    /* Now map one page for the program's initial stack at virtual address
-     * USTACKTOP - PGSIZE. */
+  	ph = (struct elf_proghdr *) ((uint8_t *) header + header->e_phoff);
+  	eph = ph + header->e_phnum;
 
-    /* LAB 3: Your code here. */
+  	lcr3(PADDR(e->env_pgdir));
+
+    while(ph < eph)
+    {
+  		if (ph->p_type == ELF_PROG_LOAD)
+      {
+  			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+  			memset((void *)ph->p_va, 0, ph->p_memsz);
+  			memcpy((void *)ph->p_va, binary+ph->p_offset, ph->p_filesz);
+  		}
+      ph++;
+    }
+
+  	lcr3(PADDR(kern_pgdir));
+
+  	e->env_tf.tf_eip = header->e_entry;
+
+
+  /* Now map one page for the program's initial stack at virtual address
+   * USTACKTOP - PGSIZE. */
+
+   region_alloc(e, (void *) (USTACKTOP - PGSIZE), PGSIZE);
+  /* LAB 3: Your code here. */
 }
 
 /*
@@ -400,6 +425,24 @@ static void load_icode(struct env *e, uint8_t *binary)
 void env_create(uint8_t *binary, enum env_type type)
 {
     /* LAB 3: Your code here. */
+     struct env *new_env;
+     int ret_val = env_alloc(&new_env, 0);
+     if(ret_val == -E_NO_FREE_ENV)
+     {
+       panic("no space for new env\n");
+     }
+     if(ret_val == -E_NO_MEM)
+     {
+       panic("memory error\n");
+     }
+     else
+     {
+       new_env->env_type = type;
+       cprintf("new env created, loading icode\n");
+       load_icode(new_env, binary);
+     }
+
+
 }
 
 /*
@@ -514,5 +557,18 @@ void env_run(struct env *e)
 
     /* LAB 3: Your code here. */
 
-    panic("env_run not yet implemented");
+    if(curenv != NULL)
+    {
+      curenv->env_status = ENV_RUNNABLE;
+    }
+
+    curenv = e;
+    e->env_status = ENV_RUNNING;
+    (e->env_runs)++;
+
+    lcr3(PADDR(e->env_pgdir));
+
+    env_pop_tf(&e->env_tf);
+
+    panic("env_run not yet testing");
 }
