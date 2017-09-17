@@ -120,7 +120,13 @@ void env_init(void)
 {
     /* Set up envs array. */
     /* LAB 3: Your code here. */
-
+		env_free_list = 0;
+		for(ssize_t env_i = NENV - 1; env_i >= 0; --env_i){
+			envs[env_i].env_link = env_free_list;
+			envs[env_i].env_id = 0;
+			envs[env_i].env_type = ENV_FREE;
+			env_free_list = &envs[env_i];
+		}
     /* Per-CPU part of the initialization */
     env_init_percpu();
 }
@@ -182,7 +188,10 @@ static int env_setup_vm(struct env *e)
      */
 
     /* LAB 3: Your code here. */
-
+		e->env_pgdir = (pde_t*)page2kva(p);
+		memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+		memset(&e->env_pgdir[0], 0x0, PDX(UTOP) * sizeof(pde_t));
+		++(p->pp_ref);
     /* UVPT maps the env's own page table read-only.
      * Permissions: kernel R, user R */
     e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
@@ -273,6 +282,22 @@ static void region_alloc(struct env *e, void *va, size_t len)
      *   You should round va down, and round (va + len) up.
      *   (Watch out for corner-cases!)
      */
+		 struct page_info *pp;
+		 size_t page_number;
+		 va = ROUNDDOWN(va, PGSIZE);
+		 len = ROUNDUP(len, PGSIZE);
+		 page_number = len / PGSIZE;
+		 for(int page_i = 0 ; page_i < page_number; ++page_i){
+			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
+			 if(!pp)
+			 	goto no_memory;
+			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, PTE_P | PTE_U | PTE_W);
+		 	}
+			goto release;
+	no_memory:
+			panic("Cannot allocate new region for env %08x", e->env_id);
+	release:
+			return;
 }
 
 /*
@@ -328,10 +353,30 @@ static void load_icode(struct env *e, uint8_t *binary)
      */
 
     /* LAB 3: Your code here. */
+  	struct elf_proghdr *ph, *eph;
+		struct page_info *p;
+		struct elf *elf = (struct elf*) binary;
+
+		if(elf->e_magic != ELF_MAGIC)
+			panic(" Incorrect ELF structure in env");
+
+		ph = (struct elf_proghdr *) ((uint8_t *) elf + elf->e_phoff);
+		eph = ph + elf->e_phnum;
+		lcr3(PADDR(e->env_pgdir));
+		for (; ph < eph; ++ph){
+			if(ph->p_type != ELF_PROG_LOAD)
+				continue;
+			region_alloc(e, (void*)ph->p_va, ph->p_memsz);
+			memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+			memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
+		}
+		lcr3(PADDR(kern_pgdir));
+
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
-
+		region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
+		e->env_tf.tf_eip = elf->e_entry;
     /* LAB 3: Your code here. */
 
 
@@ -353,6 +398,10 @@ static void load_icode(struct env *e, uint8_t *binary)
 void env_create(uint8_t *binary, enum env_type type)
 {
     /* LAB 3: Your code here. */
+		struct env *env;
+		if(env_alloc(&env, 0) < 0)
+			panic("Cannot create first user-mode environment");
+		load_icode(env, binary);
 }
 
 /*
@@ -464,9 +513,12 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
-
+		 if(curenv && curenv->env_status == ENV_RUNNING)
+		 	curenv->env_status = ENV_RUNNABLE;
+		 curenv = e;
+		 curenv->env_status = ENV_RUNNING;
+		 ++curenv->env_runs;
+		 lcr3(PADDR(curenv->env_pgdir));
+		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
-
-    panic("env_run not yet implemented");
 }
-

@@ -18,7 +18,7 @@ static size_t npages_basemem;   /* Amount of base memory (in pages) */
 pde_t *kern_pgdir;                       /* Kernel's initial page directory */
 struct page_info *pages;                 /* Physical page state array */
 struct page_info *page_free_list; /* Free list of physical pages */
-
+size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -136,7 +136,7 @@ void mem_init(void)
      * Make 'envs' point to an array of size 'NENV' of 'struct env'.
      * LAB 3: Your code here.
      */
-
+		 envs = boot_alloc(NENV * sizeof(struct env));
 		 pages = boot_alloc(npages * sizeof(struct page_info));
     /*********************************************************************
      * Now that we've allocated the initial kernel data structures, we set
@@ -178,7 +178,8 @@ void mem_init(void)
      *    - envs itself -- kernel RW, user NONE
      * LAB 3: Your code here.
      */
-
+		 boot_map_region(kern_pgdir, UENVS, sizeof(struct env) * NENV, PADDR(envs), PTE_U);
+		 boot_map_region(kern_pgdir, (unsigned int)envs, sizeof(struct env) * NENV, PADDR(envs), PTE_W);
 
     /*********************************************************************
      * Use the physical memory that 'bootstack' refers to as the kernel
@@ -221,7 +222,7 @@ void mem_init(void)
      * If the machine reboots at this point, you've probably set up your
      * kern_pgdir wrong. */
     lcr3(PADDR(kern_pgdir));
-
+		premapped_rbound = MAX_VA;
     check_page_free_list(0);
 
     /* entry.S set the really important flags in cr0 (including enabling
@@ -285,14 +286,9 @@ struct page_info *page_alloc(int alloc_flags)
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
 		if(alloc_flags & ALLOC_PREMAPPED){
-
-			curr_pgdir = (pde_t*)rcr3();
-			if(curr_pgdir == entry_pgdir)
-				goto normal_page; // otherwise we have not configured curr_pgdir
-
 			result = page_free_list;
 			while(result){
-				if(page2pa(result) < HUGE_PGSIZE){
+				if(page2pa(result) >= 0x0 && page2pa(result) < PADDR((void*)premapped_rbound)){
 					remove_page_free_entry(result);
 					goto found_page;
 				}
@@ -432,6 +428,10 @@ static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t 
 		pte_t *pte;
     for(size_t item = 0; item < size; item += PGSIZE){
 			pte = pgdir_walk(pgdir, (void*)(va + item), CREATE_NORMAL);
+			if(!pte)
+				return;
+
+			pgdir[PDX(va + item)] |= perm;
 			*pte = (pa + item) | PTE_P | perm;
 		}
 }
@@ -570,8 +570,19 @@ static uintptr_t user_mem_check_addr;
  */
 int user_mem_check(struct env *env, const void *va, size_t len, int perm)
 {
-    /* LAB 3: Your code here. */
-
+		struct page_info *pp;
+		pte_t *pte;
+		size_t page_number;
+	  len = ROUNDUP(len, PGSIZE);
+		page_number = len / PGSIZE;
+		for(int page_i = 0; page_i <  page_number; ++page_i){
+			pp = page_lookup(env->env_pgdir, (void*)va, &pte);
+			if(!pp || ((*pte & perm) != perm)){
+				user_mem_check_addr = (unsigned int)va;
+				return -E_FAULT;
+			}
+			va = ROUNDDOWN((void*)va + PGSIZE, PGSIZE);
+		}
     return 0;
 }
 

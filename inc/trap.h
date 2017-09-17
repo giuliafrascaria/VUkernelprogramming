@@ -74,7 +74,6 @@ struct trapframe {
     uint16_t tf_padding4;
 } __attribute__((packed));
 
-
 #endif /* !__ASSEMBLER__ */
 
 #endif /* !JOS_INC_TRAP_H */
