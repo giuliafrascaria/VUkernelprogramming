@@ -290,7 +290,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
 			 pp = page_alloc(ALLOC_ZERO);
 			 if(!pp)
 			 	goto no_memory;
-			 page_insert(e->env_pgdir, va + page_i * PGSIZE, pp, PTE_P | PTE_U | PTE_W);
+			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, PTE_P | PTE_U | PTE_W);
 		 	}
 			goto release;
 	no_memory:
@@ -361,7 +361,7 @@ static void load_icode(struct env *e, uint8_t *binary)
 
 		ph = (struct elf_proghdr *) ((uint8_t *) elf + elf->e_phoff);
 		eph = ph + elf->e_phnum;
-		lcr3((unsigned int)e->env_pgdir);
+		lcr3(PADDR(e->env_pgdir));
 		for (; ph < eph; ++ph){
 			if(ph->p_type != ELF_PROG_LOAD)
 				continue;
@@ -369,16 +369,12 @@ static void load_icode(struct env *e, uint8_t *binary)
 			memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
 			memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
 		}
-		lcr3((unsigned int)kern_pgdir);
+		lcr3(PADDR(kern_pgdir));
 
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
-		p = page_alloc(ALLOC_ZERO);
-		if(!p)
-			panic("No enough memory");
-		if(!page_insert(e->env_pgdir, (void*)USTACKTOP - PGSIZE, p, PTE_U | PTE_W))
-			panic("Cannot insert page in new env");
+		region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
 		e->env_tf.tf_eip = elf->e_entry;
 		e->env_tf.tf_esp = USTACKTOP;
     /* LAB 3: Your code here. */
@@ -509,12 +505,12 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
-		 if(curenv->env_status != ENV_RUNNING)
+		 if(curenv && curenv->env_status != ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
 		 curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
-		 lcr3((unsigned int)curenv->env_pgdir);
+		 lcr3(PADDR(curenv->env_pgdir));
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }

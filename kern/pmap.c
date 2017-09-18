@@ -18,7 +18,7 @@ static size_t npages_basemem;   /* Amount of base memory (in pages) */
 pde_t *kern_pgdir;                       /* Kernel's initial page directory */
 struct page_info *pages;                 /* Physical page state array */
 struct page_info *page_free_list; /* Free list of physical pages */
-
+size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -221,7 +221,7 @@ void mem_init(void)
      * If the machine reboots at this point, you've probably set up your
      * kern_pgdir wrong. */
     lcr3(PADDR(kern_pgdir));
-
+		premapped_rbound = MAX_VA;
     check_page_free_list(0);
 
     /* entry.S set the really important flags in cr0 (including enabling
@@ -285,14 +285,9 @@ struct page_info *page_alloc(int alloc_flags)
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
 		if(alloc_flags & ALLOC_PREMAPPED){
-
-			curr_pgdir = (pde_t*)rcr3();
-			if(curr_pgdir == entry_pgdir)
-				goto normal_page; // otherwise we have not configured curr_pgdir
-
 			result = page_free_list;
 			while(result){
-				if(page2pa(result) < HUGE_PGSIZE){
+				if(page2pa(result) >= 0x0 && page2pa(result) < PADDR((void*)premapped_rbound)){
 					remove_page_free_entry(result);
 					goto found_page;
 				}
