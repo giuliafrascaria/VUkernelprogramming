@@ -45,11 +45,13 @@
 
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
+ * see in intel manual, table for error code interrupts page 187
  */
 
- TRAPHANDLER_NOEC(h0, 0)
+
+    TRAPHANDLER_NOEC(h0, 0)
   	TRAPHANDLER_NOEC(h1, 1)
-  	TRAPHANDLER_NOEC(h3, 3)
+  	TRAPHANDLER_NOEC(h3, 3)    //breakpoint trap, needs debug
   	TRAPHANDLER_NOEC(h4, 4)
   	TRAPHANDLER_NOEC(h5, 5)
   	TRAPHANDLER_NOEC(h6, 6)
@@ -61,19 +63,33 @@
   	TRAPHANDLER(h12, 12)
   	TRAPHANDLER(h13, 13)
   	TRAPHANDLER(h14, 14)
+    TRAPHANDLER_NOEC(h15, 15)
   	TRAPHANDLER_NOEC(h16, 16)
+    TRAPHANDLER(h17, 17)
+    TRAPHANDLER_NOEC(h18, 18)
+    TRAPHANDLER_NOEC(h19, 19)
+    TRAPHANDLER_NOEC(h20, 20)
+
+    TRAPHANDLER_NOEC(h48, 48)
 
  /*
   * Lab 3: Your code here for _alltraps, see trap.h
+1-make sure the struct matches the trap gate
+2-push registers -> pushal
+3-update to kernel segment GD_KD
+5-push esp
+6-jump to trap
   */
 
   _alltraps:
   	  pushl %ds
   	  pushl %es
   	  pushal
+
   	  pushl $GD_KD
   	  popl %ds
   	  pushl $GD_KD
   	  popl %es
+
   	  pushl %esp
   	  call trap

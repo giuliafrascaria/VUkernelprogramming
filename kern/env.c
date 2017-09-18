@@ -122,12 +122,23 @@ void env_init(void)
     /* LAB 3: Your code here. */
 
     //they need to be in the same order, insert in reverse order
-    for (int i = NENV -1; i >= 0 ; i--)
+    // for (int i = NENV -1; i >= 0 ; i--)
+    // {
+    //     envs[i].env_id = 0;
+    //     envs[i].env_link = env_free_list;
+    //     env_free_list = envs+i; //the first entry remains uninitialized?
+    // }
+
+    for(int i = 0; i < NENV - 1; i++)
     {
-        envs[i].env_id = 0;
-        envs[i].env_link = env_free_list;
-        env_free_list = envs+i;
+      //insert in envs and keep order in free list
+      envs[i].env_id = 0;
+      envs[i].env_link = &envs[i + 1]; //CORNER CASE!!
+
     }
+    env_free_list = &envs[0];
+    envs[NENV-1].env_link = NULL;
+
     /* Per-CPU part of the initialization */
     env_init_percpu();
 }
@@ -171,11 +182,6 @@ static int env_setup_vm(struct env *e)
     if (!(p = page_alloc(ALLOC_ZERO)))
         return -E_NO_MEM;
 
-
-
-
-
-
     /*
      * Now, set e->env_pgdir and initialize the page directory.
      *
@@ -208,7 +214,7 @@ static int env_setup_vm(struct env *e)
     //boot_map_region(e->env_pgdir, KERNBASE, MAX_VA - KERNBASE, 0x0, PTE_W);
 
     memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
-    //not quite sure it is right, am I not mapping references to pages below UVPT as well
+    //not sure it is right, am I not mapping references to pages below UVPT as well?
 
     //this should be all that is above UVPT
     /* UVPT maps the env's own page table read-only.
@@ -306,14 +312,15 @@ static void region_alloc(struct env *e, void *va, size_t len)
      */
 
      //total number of pages to allocate
-     void * va_align = ROUNDDOWN(va, PGSIZE);
-     int env_pages = ROUNDUP(len + va - va_align, PGSIZE)/PGSIZE; //i think I need some kind of offset here
+     void * va_align = ROUNDDOWN(va, PGSIZE); //I perfrm page align here
+     int env_pages = ROUNDUP(len + va - va_align, PGSIZE)/PGSIZE; //take care of alignment offset
 
-     struct page_info *pg;
+     //struct page_info *pg;
 
      for(int i = 0; i < env_pages; i++)
      {
        //allocate physical page and map in VM for the environment
+       struct page_info *pg;
        pg = page_alloc(0);
        if(pg == NULL)
        {
@@ -325,7 +332,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
          //map in virtual memory with page insert
          if(page_insert(e->env_pgdir, pg, va_align + i*PGSIZE, PTE_P | PTE_U | PTE_W) == -E_NO_MEM)
          {
-           panic("physical memory alloc failed 2\n");
+           panic("physical memory alloc failed during cycle\n");
          }
        }
      }
@@ -384,35 +391,66 @@ static void load_icode(struct env *e, uint8_t *binary)
      */
 
     /* LAB 3: Your code here. */
+
+    /*
+    realdelf -l /obj/user/divzero
+
+    File elf di tipo EXEC (file eseguibile)
+    Punto di ingresso 0x800020
+    Ci sono 4 intestazioni di programma, iniziando dall'offset 52
+
+    Intestazioni di programma:
+    Tipo           Offset   IndirVirt  IndirFis   DimFile DimMem  Flg Allin
+    LOAD           0x001000 0x00200000 0x00200000 0x03e65 0x03e65 RW  0x1000
+    LOAD           0x005020 0x00800020 0x00800020 0x01130 0x01130 R E 0x1000
+    LOAD           0x007000 0x00802000 0x00802000 0x00004 0x0000c RW  0x1000
+    GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RWE 0x10
+
+    Mappatura da sezione a segmento:
+    Sezioni del segmento...
+    00     .stab_info .stab .stabstr
+    01     .text .rodata
+    02     .data .bss
+    03
+    */
+
+    //similar process in main.c, for the first boot 
+    //in elf.h it says elf.elfmagic == ELF_MAGIC
     struct elf *header = (struct elf *) binary;
-    struct elf_proghdr *ph, *eph;
 
-  	ph = (struct elf_proghdr *) ((uint8_t *) header + header->e_phoff);
-  	eph = ph + header->e_phnum;
-
-  	lcr3(PADDR(e->env_pgdir));
-
-    while(ph < eph)
+    if(header->e_magic != ELF_MAGIC)
     {
-  		if (ph->p_type == ELF_PROG_LOAD)
-      {
-  			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
-  			memset((void *)ph->p_va, 0, ph->p_memsz);
-  			memcpy((void *)ph->p_va, binary+ph->p_offset, ph->p_filesz);
-  		}
-      ph++;
+      panic("invalid elf\n");
     }
 
-  	lcr3(PADDR(kern_pgdir));
+    struct elf_proghdr *p_header, *ep_header;
+
+  	p_header = (struct elf_proghdr *) ((uint8_t *) header + header->e_phoff);  //getting prog header
+  	ep_header = p_header + header->e_phnum;  //number of headers
+
+  	lcr3(PADDR(e->env_pgdir)); //switch to env page directory to load elf segments
+
+    while(p_header < ep_header)
+    {
+  		if (p_header->p_type == ELF_PROG_LOAD) //only load the segments that are flagged in this way
+      {
+  			region_alloc(e, (void *)p_header->p_va, p_header->p_memsz); //allocate user page of memsz
+
+  			memcpy((void *)p_header->p_va, binary+p_header->p_offset, p_header->p_filesz); //copy content from binary file to struct
+  		}
+      p_header++;
+    }
+
+  	lcr3(PADDR(kern_pgdir)); //switch back to kernel page dir
 
   	e->env_tf.tf_eip = header->e_entry;
 
 
   /* Now map one page for the program's initial stack at virtual address
    * USTACKTOP - PGSIZE. */
-
+/* LAB 3: Your code here. */
    region_alloc(e, (void *) (USTACKTOP - PGSIZE), PGSIZE);
-  /* LAB 3: Your code here. */
+
 }
 
 /*
@@ -504,6 +542,7 @@ void env_destroy(struct env *e)
 {
     env_free(e);
 
+    //so I am expecting this anyway?
     cprintf("Destroyed the only environment - nothing more to do!\n");
     while (1)
         monitor(NULL);

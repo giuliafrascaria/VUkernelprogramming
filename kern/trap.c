@@ -82,9 +82,16 @@ void trap_init(void)
 	void h13();
 	void h14();
 	void h16();
+  void h17();
+  void h18();
+  void h19();
+  void h20();
+
+  void h48();
+
 	SETGATE(idt[0], 0, GD_KT, h0, 0);
 	SETGATE(idt[1], 0, GD_KT, h1, 0);
-	SETGATE(idt[3], 0, GD_KT, h3, 0);
+	SETGATE(idt[3], 0, GD_KT, h3, 3);  //does not work with provilege level 0
 	SETGATE(idt[4], 0, GD_KT, h4, 0);
 	SETGATE(idt[5], 0, GD_KT, h5, 0);
 	SETGATE(idt[6], 0, GD_KT, h6, 0);
@@ -97,6 +104,13 @@ void trap_init(void)
 	SETGATE(idt[13], 0, GD_KT, h13, 0);
 	SETGATE(idt[14], 0, GD_KT, h14, 0);
 	SETGATE(idt[16], 0, GD_KT, h16, 0);
+  SETGATE(idt[17], 0, GD_KT, h17, 0);
+  SETGATE(idt[18], 0, GD_KT, h18, 0);
+  SETGATE(idt[19], 0, GD_KT, h19, 0);
+  SETGATE(idt[20], 0, GD_KT, h20, 0);
+
+  SETGATE(idt[48], 0, GD_KT, h48, 3); //syscall handling, different Privilege
+                                      //see mmu.h
 
     //we need to set the gate and trap handler for every exception, I think
 
@@ -174,6 +188,33 @@ static void trap_dispatch(struct trapframe *tf)
     /* Handle processor exceptions. */
     /* LAB 3: Your code here. */
 
+
+  //part 1: page fault
+  if (tf->tf_trapno == T_PGFLT)
+  {
+		cprintf("page fault trapped\n");
+		page_fault_handler(tf);
+		return;
+	}
+  //part 2: breakpoint
+  if(tf->tf_trapno == T_BRKPT)
+  {
+    cprintf("breakpoint handler\n");
+    monitor(tf);
+    return;
+  }
+  //part 3: syscall
+  if(tf->tf_trapno == T_SYSCALL)
+  {
+    cprintf("syscall trapped\n");
+    /*
+    syscall dispatcher: see syscall.c
+    int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
+            uint32_t a4, uint32_t a5)
+    */
+    return;
+  }
+
     /* Unexpected trap: The user process or the kernel has a bug. */
     print_trapframe(tf);
     if (tf->tf_cs == GD_KT)
@@ -232,7 +273,10 @@ void page_fault_handler(struct trapframe *tf)
     /* Handle kernel-mode page faults. */
 
     /* LAB 3: Your code here. */
-
+    if((tf->tf_cs&3) == 0)
+    {
+      panic("kernel mode page fault detected\n");
+    }
     /* We've already handled kernel-mode exceptions, so if we get here, the page
      * fault happened in user mode. */
 

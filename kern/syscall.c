@@ -22,6 +22,7 @@ static void sys_cputs(const char *s, size_t len)
      * Destroy the environment if not. */
 
     /* LAB 3: Your code here. */
+	  user_mem_assert(curenv, s, len, PTE_U);
 
     /* Print the string supplied by the user. */
     cprintf("%.*s", len, s);
@@ -81,4 +82,3 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
         return -E_NO_SYS;
     }
 }
-
