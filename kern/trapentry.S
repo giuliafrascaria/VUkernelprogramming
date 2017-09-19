@@ -77,13 +77,6 @@ TRAPHANDLER_NOEC(system_call_intr, 48);
  * Lab 3: Your code here for _alltraps
  */
 _alltraps:
-	pushl %ss;
-	pushl %esp;
-	pushfl;
-	pushl %cs;
-	pushl .;
-	pushl 24(%esp);
-	pushl 24(%esp);
 	pushl %ds;
 	pushl %es;
 	pushal;
@@ -93,11 +86,4 @@ _alltraps:
 	popl %es;
 	pushl %esp;
 	call trap;
-	pop %esp;
-	popal;
-	popl %es;
-	popl %ds;
-	movl 16(%esp), %esp;
-	popfl
-	movl 8(%esp), %esp
-	iret;
+	

@@ -179,6 +179,7 @@ void mem_init(void)
      * LAB 3: Your code here.
      */
 		 boot_map_region(kern_pgdir, UENVS, sizeof(struct env) * NENV, PADDR(envs), PTE_U);
+		 boot_map_region(kern_pgdir, (unsigned int)envs, sizeof(struct env) * NENV, PADDR(envs), PTE_W);
 
     /*********************************************************************
      * Use the physical memory that 'bootstack' refers to as the kernel
@@ -427,6 +428,10 @@ static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t 
 		pte_t *pte;
     for(size_t item = 0; item < size; item += PGSIZE){
 			pte = pgdir_walk(pgdir, (void*)(va + item), CREATE_NORMAL);
+			if(!pte)
+				return;
+
+			pgdir[PDX(va + item)] |= perm;
 			*pte = (pa + item) | PTE_P | perm;
 		}
 }
@@ -568,15 +573,15 @@ int user_mem_check(struct env *env, const void *va, size_t len, int perm)
 		struct page_info *pp;
 		pte_t *pte;
 		size_t page_number;
-		va = ROUNDDOWN(va, PGSIZE);
 	  len = ROUNDUP(len, PGSIZE);
 		page_number = len / PGSIZE;
 		for(int page_i = 0; page_i <  page_number; ++page_i){
-			pp = page_lookup(env->env_pgdir, (void*)va + page_i * PGSIZE, &pte);
+			pp = page_lookup(env->env_pgdir, (void*)va, &pte);
 			if(!pp || ((*pte & perm) != perm)){
-				user_mem_check_addr = (unsigned int)va + page_i * PGSIZE;
+				user_mem_check_addr = (unsigned int)va;
 				return -E_FAULT;
 			}
+			va = ROUNDDOWN((void*)va + PGSIZE, PGSIZE);
 		}
     return 0;
 }

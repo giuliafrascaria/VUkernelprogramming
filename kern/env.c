@@ -190,6 +190,7 @@ static int env_setup_vm(struct env *e)
     /* LAB 3: Your code here. */
 		e->env_pgdir = (pde_t*)page2kva(p);
 		memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+		memset(&e->env_pgdir[0], 0x0, PDX(UTOP) * sizeof(pde_t));
 		++(p->pp_ref);
     /* UVPT maps the env's own page table read-only.
      * Permissions: kernel R, user R */
@@ -287,7 +288,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
 		 len = ROUNDUP(len, PGSIZE);
 		 page_number = len / PGSIZE;
 		 for(int page_i = 0 ; page_i < page_number; ++page_i){
-			 pp = page_alloc(ALLOC_ZERO);
+			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
 			 if(!pp)
 			 	goto no_memory;
 			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, PTE_P | PTE_U | PTE_W);
@@ -376,7 +377,6 @@ static void load_icode(struct env *e, uint8_t *binary)
      * USTACKTOP - PGSIZE. */
 		region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
 		e->env_tf.tf_eip = elf->e_entry;
-		//e->env_tf.tf_esp = USTACKTOP;
     /* LAB 3: Your code here. */
 }
 
@@ -505,7 +505,7 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
-		 if(curenv && curenv->env_status != ENV_RUNNING)
+		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
 		 curenv->env_status = ENV_RUNNING;

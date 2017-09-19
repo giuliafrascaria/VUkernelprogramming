@@ -76,13 +76,11 @@ void trap_init(void)
 		SETGATE(idt[T_ILLOP], 0, GD_KT, invalid_opcode_intr, 0);
 		SETGATE(idt[T_DEVICE], 0, GD_KT, device_not_avail_intr, 0);
 		SETGATE(idt[T_DBLFLT], 0, GD_KT, double_fault_intr, 0);
-		//SETGATE(idt[T_DIVIDE], 1, GD_KT, devide_zero_intr, 0);
 		SETGATE(idt[T_TSS], 0, GD_KT, invalid_tss_intr, 0);
 		SETGATE(idt[T_SEGNP], 0, GD_KT, segment_not_present_intr, 0);
 		SETGATE(idt[T_STACK], 0, GD_KT, stack_segment_fault_intr, 0);
 		SETGATE(idt[T_GPFLT], 0, GD_KT, general_protection_intr, 0);
 		SETGATE(idt[T_PGFLT], 0, GD_KT, page_fault_intr, 0);
-		//SETGATE(idt[T_DIVIDE], 1, GD_KT, devide_zero_intr, 0);
 		SETGATE(idt[T_FPERR], 0, GD_KT, fpu_excpt_intr, 0);
 		SETGATE(idt[T_ALIGN], 0, GD_KT, aligment_check_intr, 0);
 		SETGATE(idt[T_MCHK], 0, GD_KT, machine_check_intr, 0);
@@ -171,7 +169,8 @@ static void trap_dispatch(struct trapframe *tf)
 			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
 			return;
 		}
-    /* Unexpected trap: The user process or the kernel has a bug. */
+
+		/* Unexpected trap: The user process or the kernel has a bug. */
     print_trapframe(tf);
     if (tf->tf_cs == GD_KT)
         panic("unhandled trap in kernel");
@@ -220,18 +219,21 @@ void trap(struct trapframe *tf)
 
 void breakpoint_handler(struct trapframe *tf){
 	char *buf;
-	while(1){
-		buf = readline("DBG> ");
-		if(buf && !strcmp(buf, "printframe"))
-			print_trapframe(tf);
-		if(buf && !strcmp(buf, "kill"))
-			env_destroy(curenv);
-		else if(buf && !strcmp(buf, "continue")){
-			return;
-		}
-		else
-			cprintf("GDB> Unknown command for debugger\n");
-	}
+	monitor(tf);
+	// while(1){
+	// 	buf = readline("DBG> ");
+	// 	if(buf && !strcmp(buf, "printframe"))
+	// 		print_trapframe(tf);
+	// 	if(buf && !strcmp(buf, "kill"))
+	// 		env_destroy(curenv);
+	// 	else if(buf && !strcmp(buf, "continue")){
+	// 		//++tf->tf_eip;
+	// 		cprintf("NEW EIP = %p\n", tf->tf_eip);
+	// 		return;
+	// 	}
+	// 	else
+	// 		cprintf("GDB> Unknown command for debugger\n");
+	// }
 }
 
 void page_fault_handler(struct trapframe *tf)
@@ -242,8 +244,7 @@ void page_fault_handler(struct trapframe *tf)
     fault_va = rcr2();
 
     /* Handle kernel-mode page faults. */
-		if(fault_va >= KERNBASE)
-			panic("Trying to access kernel space from userspace");
+
     /* LAB 3: Your code here. */
 
     /* We've already handled kernel-mode exceptions, so if we get here, the page
@@ -254,4 +255,7 @@ void page_fault_handler(struct trapframe *tf)
         curenv->env_id, fault_va, tf->tf_eip);
     print_trapframe(tf);
     env_destroy(curenv);
+		if(fault_va >= KERNBASE)
+			panic("Trying to access kernel space from userspace");
+
 }
