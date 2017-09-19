@@ -376,7 +376,7 @@ static void load_icode(struct env *e, uint8_t *binary)
      * USTACKTOP - PGSIZE. */
 		region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
 		e->env_tf.tf_eip = elf->e_entry;
-		e->env_tf.tf_esp = USTACKTOP;
+		//e->env_tf.tf_esp = USTACKTOP;
     /* LAB 3: Your code here. */
 }
 

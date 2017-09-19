@@ -573,7 +573,7 @@ int user_mem_check(struct env *env, const void *va, size_t len, int perm)
 		page_number = len / PGSIZE;
 		for(int page_i = 0; page_i <  page_number; ++page_i){
 			pp = page_lookup(env->env_pgdir, (void*)va + page_i * PGSIZE, &pte);
-			if(!pp || ((*pte | perm) != perm)){
+			if(!pp || ((*pte & perm) != perm)){
 				user_mem_check_addr = (unsigned int)va + page_i * PGSIZE;
 				return -E_FAULT;
 			}

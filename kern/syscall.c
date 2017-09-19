@@ -20,7 +20,7 @@ static void sys_cputs(const char *s, size_t len)
 {
     /* Check that the user has permission to read memory [s, s+len).
      * Destroy the environment if not. */
-
+		 user_mem_assert(curenv, s, len, 0);
     /* LAB 3: Your code here. */
 
     /* Print the string supplied by the user. */
@@ -74,10 +74,24 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
      * LAB 3: Your code here.
      */
 
-    panic("syscall not implemented");
-
     switch (syscallno) {
-    default:
+			case SYS_cputs:
+				sys_cputs((char*)a1, a2);
+				break;
+			case SYS_cgetc:
+				return sys_cgetc();
+				break;
+
+			case SYS_getenvid:
+				return sys_getenvid();
+				break;
+
+			case SYS_env_destroy:
+				sys_env_destroy(a1);
+				break;
+
+		default:
         return -E_NO_SYS;
     }
+		return 0;
 }
