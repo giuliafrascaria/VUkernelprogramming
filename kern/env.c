@@ -393,6 +393,7 @@ void env_create(uint8_t *binary, enum env_type type)
 		struct env *env;
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
+		env->env_type = type;
 		load_icode(env, binary);
 }
 
