@@ -285,6 +285,7 @@ struct page_info *page_alloc(int alloc_flags)
    	struct page_info *result = NULL;
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
+		int _pgsize = alloc_flags & ALLOC_HUGE? HUGE_PGSIZE : PGSIZE;
 		if(alloc_flags & ALLOC_PREMAPPED){
 			result = page_free_list;
 			while(result){
@@ -327,7 +328,7 @@ struct page_info *page_alloc(int alloc_flags)
 		}
 	found_page:
 			if(alloc_flags & ALLOC_ZERO)
-				memset(page2kva(result), 0x0, alloc_flags & ALLOC_HUGE? HUGE_PGSIZE : PGSIZE);
+				memset(page2kva(result), 0x0, _pgsize);
 	release:
     return result;
 }

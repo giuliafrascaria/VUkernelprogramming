@@ -4,12 +4,14 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/mm.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/trap.h>
 #include <kern/syscall.h>
 #include <kern/console.h>
+
 
 /*
  * Print a string to the system console.
@@ -67,30 +69,28 @@ static int sys_env_destroy(envid_t envid)
 /*
  * Creates a new anonymous mapping somewhere in the virtual address space.
  *
- * Supported flags: 
+ * Supported flags:
  *     MAP_POPULATE
- * 
+ *
  * Returns the address to the start of the new mapping, on success,
  * or -1 if request could not be satisfied.
  */
 static void *sys_vma_create(size_t size, int perm, int flags)
 {
-   /* Virtual Memory Area allocation */
-
-   /* LAB 4: Your code here. */
-   return (void *)-1;
+   void* addr = find_empty_space(size, &curenv->env_mm, perm, flags);
+	 if(!addr)
+	 	return NULL;
+   return do_map(&curenv->env_mm, NULL, addr, size, perm, flags);
 }
 
 /*
- * Unmaps the specified range of memory starting at 
+ * Unmaps the specified range of memory starting at
  * virtual address 'va', 'size' bytes long.
  */
 static int sys_vma_destroy(void *va, size_t size)
 {
-   /* Virtual Memory Area deallocation */
-
-   /* LAB 4: Your code here. */
-   return -1;
+	do_munmap(&curenv->env_mm, va, size);
+	return 0;
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -117,6 +117,14 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 
 			case SYS_env_destroy:
 				sys_env_destroy(a1);
+				break;
+
+			case SYS_vma_create:
+				return (unsigned int)sys_vma_create(a1, a2, a3);
+				break;
+
+			case SYS_vma_destroy:
+				sys_vma_destroy((void*)a1, a2);
 				break;
 
 		default:

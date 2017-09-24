@@ -64,12 +64,10 @@ void *sys_vma_create(size_t size, int perm, int flags)
 {
     /* LAB 4: Your code here */
 
-    return NULL;
+    return (void*)syscall(SYS_vma_create, 0, size, perm, flags, 0, 0);
 }
 
 int sys_vma_destroy(void *va, size_t size)
 {
-    /* LAB 4: Your code here */
-
-    return -E_NO_SYS;
+		return syscall(SYS_vma_destroy, 0, (unsigned int)va, size, 0, 0, 0);
 }
