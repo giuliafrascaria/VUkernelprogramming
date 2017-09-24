@@ -199,6 +199,25 @@ static int env_setup_vm(struct env *e)
     return 0;
 }
 
+int vma_init(struct env *e){
+	struct vma *tmp;
+	struct page_info *pp;
+	e->env_mm.vma_free_list = 0;
+	pp = page_alloc(ALLOC_ZERO);
+	++pp->pp_ref;
+	if(!pp)
+		return -E_NO_MEM;
+	e->env_mm.mm_vma = page2kva(pp);
+	e->env_mm.mm_vma->vma_mm = &e->env_mm;
+	tmp = (struct vma*)e->env_mm.mm_vma;
+	for(size_t vma_i = 0; vma_i < PGSIZE / sizeof(struct vma); ++vma_i){
+		tmp->vma_next = e->env_mm.vma_free_list;
+		e->env_mm.vma_free_list->vma_prev = tmp;
+		e->env_mm.vma_free_list = tmp->vma_next;
+	};
+	return 0;
+}
+
 /*
  * Allocates and initializes a new environment.
  * On success, the new environment is stored in *newenv_store.
@@ -259,7 +278,10 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     /* commit the allocation */
     env_free_list = e->env_link;
     *newenv_store = e;
-
+		if(!vma_init(e)){
+			env_destroy(e);
+			return -E_NO_MEM;
+		}
     cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
     return 0;
 }
@@ -366,16 +388,17 @@ static void load_icode(struct env *e, uint8_t *binary)
 		for (; ph < eph; ++ph){
 			if(ph->p_type != ELF_PROG_LOAD)
 				continue;
-			region_alloc(e, (void*)ph->p_va, ph->p_memsz);
-			memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-			memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
+			//region_alloc(e, (void*)ph->p_va, ph->p_memsz);
+			//memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+			//memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
+			do_map(&env->env_mm, binary, ph->p_va, ph->p_filesz, PROT_EXEC | PROT_READ, VMA_BINARY);
 		}
 		lcr3(PADDR(kern_pgdir));
 
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
-		region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
+		//region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
 		e->env_tf.tf_eip = elf->e_entry;
     /* LAB 3: Your code here. */
 
@@ -385,6 +408,7 @@ static void load_icode(struct env *e, uint8_t *binary)
      * 2. Map one RW page of VMA for UTEMP+PGSIZE at virtual address UTEMP. */
 
     /* LAB 4: Your code here. */
+
 
 }
 
