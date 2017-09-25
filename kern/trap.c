@@ -263,4 +263,6 @@ void page_fault_handler(struct trapframe *tf)
 		}
     /* Destroy the environment that caused the fault. */
     env_destroy(curenv);
+
+
 }
