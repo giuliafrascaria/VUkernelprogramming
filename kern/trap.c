@@ -2,6 +2,7 @@
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>
+#include <inc/mm.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -239,23 +240,32 @@ void breakpoint_handler(struct trapframe *tf){
 void page_fault_handler(struct trapframe *tf)
 {
     uint32_t fault_va;
+		struct vma *vma;
+
+		if(tf->tf_cs == GD_KT)
+			panic("Kernel space page fault");
 
     /* Read processor's CR2 register to find the faulting address */
     fault_va = rcr2();
 
-    /* Handle kernel-mode page faults. */
-
-    /* LAB 3: Your code here. */
-
-    /* We've already handled kernel-mode exceptions, so if we get here, the page
-     * fault happened in user mode. */
-
+		if(fault_va >= KERNBASE){
+			cprintf("[%08x] user fault va %08x ip %08x\n",
+	        curenv->env_id, fault_va, tf->tf_eip);
+	    print_trapframe(tf);
+	    env_destroy(curenv);
+			panic("Trying to access kernel space from userspace");
+		}
+		vma = find_vma((void*)fault_va, &(curenv->env_mm));
+		if(vma){
+			int perm = __prot2perm(vma->vma_prot);
+			region_alloc(curenv, vma->vma_va, vma->vma_len, perm | PTE_W | PTE_U);
+			return;
+		}
     /* Destroy the environment that caused the fault. */
     cprintf("[%08x] user fault va %08x ip %08x\n",
         curenv->env_id, fault_va, tf->tf_eip);
     print_trapframe(tf);
     env_destroy(curenv);
-		if(fault_va >= KERNBASE)
-			panic("Trying to access kernel space from userspace");
+
 
 }
