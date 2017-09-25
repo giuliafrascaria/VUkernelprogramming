@@ -207,13 +207,14 @@ int vma_init(struct env *e){
 	++pp->pp_ref;
 	if(!pp)
 		return -E_NO_MEM;
-	e->env_mm.mm_vma = page2kva(pp);
-	e->env_mm.mm_vma->vma_mm = &e->env_mm;
-	tmp = (struct vma*)e->env_mm.mm_vma;
+	e->env_mm.mm_common_vma = page2kva(pp);
+	e->env_mm.mm_vma = 0;
+	tmp = (struct vma*)e->env_mm.mm_common_vma;
 	for(size_t vma_i = 0; vma_i < PGSIZE / sizeof(struct vma); ++vma_i){
+		tmp->vma_mm = &e->env_mm;
 		tmp->vma_next = e->env_mm.vma_free_list;
-		e->env_mm.vma_free_list->vma_prev = tmp;
-		e->env_mm.vma_free_list = tmp->vma_next;
+		e->env_mm.vma_free_list = tmp;
+		++tmp;
 	};
 	return 0;
 }
@@ -278,7 +279,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     /* commit the allocation */
     env_free_list = e->env_link;
     *newenv_store = e;
-		if(!vma_init(e)){
+		if(vma_init(e) < 0){
 			env_destroy(e);
 			return -E_NO_MEM;
 		}
@@ -293,7 +294,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
  * Pages should be writable by user and kernel.
  * Panic if any allocation attempt fails.
  */
-static void region_alloc(struct env *e, void *va, size_t len)
+void region_alloc(struct env *e, void *va, size_t len, int perm)
 {
     /*
      * LAB 3: Your code here.
@@ -313,7 +314,7 @@ static void region_alloc(struct env *e, void *va, size_t len)
 			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
 			 if(!pp)
 			 	goto no_memory;
-			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, PTE_P | PTE_U | PTE_W);
+			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, perm);
 		 	}
 			goto release;
 	no_memory:
@@ -388,17 +389,17 @@ static void load_icode(struct env *e, uint8_t *binary)
 		for (; ph < eph; ++ph){
 			if(ph->p_type != ELF_PROG_LOAD)
 				continue;
-			//region_alloc(e, (void*)ph->p_va, ph->p_memsz);
-			//memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-			//memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
-			do_map(&env->env_mm, binary, ph->p_va, ph->p_filesz, PROT_EXEC | PROT_READ, VMA_BINARY);
+			region_alloc(e, (void*)ph->p_va, ph->p_memsz, PTE_U | PTE_W);
+			memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+			memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
+			do_map(&e->env_mm, binary, (void*)ph->p_va, ph->p_filesz, PROT_EXEC | PROT_READ, VMA_BINARY);
 		}
 		lcr3(PADDR(kern_pgdir));
-
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
 		//region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
+		 do_map(&e->env_mm, NULL, (void*)USTACKTOP - PGSIZE, PGSIZE, PROT_READ | PROT_WRITE, VMA_ANON);
 		e->env_tf.tf_eip = elf->e_entry;
     /* LAB 3: Your code here. */
 
@@ -406,10 +407,9 @@ static void load_icode(struct env *e, uint8_t *binary)
     /* vmatest binary uses the following */
     /* 1. Map one RO page of VMA for UTEMP at virtual address UTEMP.
      * 2. Map one RW page of VMA for UTEMP+PGSIZE at virtual address UTEMP. */
-
+		 do_map(&e->env_mm, NULL, (void*)UTEMP, PGSIZE, PROT_READ, VMA_ANON);
+		 do_map(&e->env_mm, NULL, (void*)UTEMP + PGSIZE, PGSIZE, PROT_WRITE | PROT_READ, VMA_ANON);
     /* LAB 4: Your code here. */
-
-
 }
 
 /*
