@@ -51,7 +51,7 @@ void * do_map(struct mm_struct *mm,  void* file, void* addr, unsigned int len,
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len);
 
 void vma_merge(struct vma *first, struct vma *second);
-void vma_split(struct vma *vma, unsigned int addr);
+void vma_split(struct vma *vma, void* addr);
 
 static inline int __prot2perm(int prot){
 	int perm = 0;

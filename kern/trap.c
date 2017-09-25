@@ -241,18 +241,18 @@ void page_fault_handler(struct trapframe *tf)
 {
     uint32_t fault_va;
 		struct vma *vma;
+		/* Read processor's CR2 register to find the faulting address */
+	  fault_va = rcr2();
+
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+				curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
 
 		if(tf->tf_cs == GD_KT)
 			panic("Kernel space page fault");
 
-    /* Read processor's CR2 register to find the faulting address */
-    fault_va = rcr2();
-
 		if(fault_va >= KERNBASE){
-			cprintf("[%08x] user fault va %08x ip %08x\n",
-	        curenv->env_id, fault_va, tf->tf_eip);
-	    print_trapframe(tf);
-	    env_destroy(curenv);
+		  env_destroy(curenv);
 			panic("Trying to access kernel space from userspace");
 		}
 		vma = find_vma((void*)fault_va, &(curenv->env_mm));
@@ -262,10 +262,5 @@ void page_fault_handler(struct trapframe *tf)
 			return;
 		}
     /* Destroy the environment that caused the fault. */
-    cprintf("[%08x] user fault va %08x ip %08x\n",
-        curenv->env_id, fault_va, tf->tf_eip);
-    print_trapframe(tf);
     env_destroy(curenv);
-
-
 }

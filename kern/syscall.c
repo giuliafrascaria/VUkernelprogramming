@@ -4,12 +4,14 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inv/mm.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/trap.h>
 #include <kern/syscall.h>
 #include <kern/console.h>
+
 
 /*
  * Print a string to the system console.
@@ -67,9 +69,9 @@ static int sys_env_destroy(envid_t envid)
 /*
  * Creates a new anonymous mapping somewhere in the virtual address space.
  *
- * Supported flags: 
+ * Supported flags:
  *     MAP_POPULATE
- * 
+ *
  * Returns the address to the start of the new mapping, on success,
  * or -1 if request could not be satisfied.
  */
@@ -82,7 +84,7 @@ static void *sys_vma_create(size_t size, int perm, int flags)
 }
 
 /*
- * Unmaps the specified range of memory starting at 
+ * Unmaps the specified range of memory starting at
  * virtual address 'va', 'size' bytes long.
  */
 static int sys_vma_destroy(void *va, size_t size)
