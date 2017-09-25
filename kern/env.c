@@ -294,8 +294,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
  * Pages should be writable by user and kernel.
  * Panic if any allocation attempt fails.
  */
-void region_alloc(struct env *e, void *va, size_t len, int perm)
-{
+void region_alloc(struct env *e, void *va, size_t len, int perm){
     /*
      * LAB 3: Your code here.
      * (But only if you need it for load_icode.)

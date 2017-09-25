@@ -9,7 +9,6 @@ struct vma* find_vma(void *addr, struct mm_struct *mm){
 			break;
 		vma = vma->vma_next;
 	}
-	//cprintf("RETURNING \n");
 	return vma;
 }
 
@@ -25,7 +24,7 @@ struct vma* find_vma_prev(void *addr, struct mm_struct *mm){
 
 void *do_map(struct mm_struct *mm,  void* file, void* addr,
 	unsigned int len, int prot, int type){
-		//cprintf("MAPPING %p with len %d\n", addr, len);
+		cprintf("MAPPING %p with len %d\n", addr, len);
 		struct vma *vma = mm->vma_free_list;
 		vma->vma_va = ROUNDDOWN(addr, PGSIZE);
 		vma->vma_len = ROUNDUP((len + addr) - vma->vma_va, PGSIZE);
@@ -38,21 +37,20 @@ void *do_map(struct mm_struct *mm,  void* file, void* addr,
 		// for(struct vma *vv = mm->mm_vma; vv; vv = vv->vma_next)
 		// 	cprintf("mapped :: va=%p, len=%d\n",vv->vma_va, vv->vma_len);
 		++mm->mm_vma_number;
-		//vma_merge(find_vma_prev(vma->vma_va, mm), vma);
-		//cprintf("CHECK %p\n", vma->vma_next);
-		//vma_merge(vma, vma->vma_next);
-		//cprintf("=============================================\n");
+		vma_merge(vma, vma->vma_next);
+		vma_merge(find_vma_prev(vma->vma_va, mm), vma);
 		return vma->vma_va;
 }
 
 void vma_merge(struct vma *first, struct vma *second){
 	// Try to merge two vma-s; if they are not mapping contiguous areas- do nothing
-	int non_mergable = !first || !second ||
-		(second->vma_va - first->vma_va > PGSIZE) ||
+	int non_mergable = !first || !second || first == second ||
+		(second->vma_va - (first->vma_va + first->vma_len) >= PGSIZE) ||
 		(first->vma_prot != second->vma_prot) ||
 		first->vma_type != second->vma_type;
 	if(non_mergable)
 	      return;
+	cprintf("TRYING TO MERGE %p with len %d to %p with len %d\n",first->vma_va,first->vma_len,second->vma_va,second->vma_len);
 	first->vma_len += second->vma_len;
 	first->vma_next = second->vma_next;
 	__inject_vma(second, &(second->vma_mm->vma_free_list));
