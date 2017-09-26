@@ -99,6 +99,11 @@ static int sys_vma_madvise(unsigned int addr, size_t size, int flags){
 	return 0;
 }
 
+static int sys_vma_protect(unsigned int addr, size_t size, int flags){
+	return vma_protect(&curenv->env_mm, (void*)addr, size, flags);
+}
+
+
 /* Dispatches to the correct kernel function, passing the arguments. */
 int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
         uint32_t a4, uint32_t a5)
@@ -135,6 +140,10 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 
 			case SYS_vma_madvise:
 				sys_vma_madvise(a1, a2, a3);
+				break;
+
+			case SYS_vma_protect:
+				sys_vma_protect(a1, a2, a3);
 				break;
 		default:
         return -E_NO_SYS;

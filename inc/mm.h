@@ -9,8 +9,6 @@ struct mm_struct {
 	struct vma *vma_free_list;
 	struct vma *mm_common_vma;
 	struct vma *mm_vma;
-	size_t mm_virt_page; // amount of mapped virtual pages
-	size_t mm_vma_number; // amount of vma area
 };
 
 
@@ -64,6 +62,7 @@ void vma_merge(struct vma *first, struct vma *second);
 void vma_split(struct vma *vma, void* addr);
 
 void madvise(struct mm_struct *mm, void *addr, size_t size, int flags);
+int vma_protect(struct mm_struct *mm, void *addr, size_t size, int flags);
 
 static inline int __prot2perm(int prot){
 	int perm = 0;

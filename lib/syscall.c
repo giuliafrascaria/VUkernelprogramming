@@ -76,3 +76,8 @@ void sys_vma_madvise(void *addr, size_t size, int flags)
 {
 		syscall(SYS_vma_madvise, 0, (unsigned int)addr, size, flags, 0, 0);
 }
+
+void sys_vma_protect(void *addr, size_t size, int flags)
+{
+			syscall(SYS_vma_protect, 0, (unsigned int)addr, size, flags, 0, 0);
+}

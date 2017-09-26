@@ -71,7 +71,6 @@ void *do_map(struct mm_struct *mm,  void* file, size_t filesz, void* addr,
 		vma->vma_bin_filesz = filesz;
 		mm->vma_free_list = mm->vma_free_list->vma_next;
 		__inject_vma(vma, &mm->mm_vma);
-		++mm->mm_vma_number;
 		vma_merge(vma, vma->vma_next);
 		vma_merge(find_vma_prev(vma->vma_va, mm), vma);
 		return vma->vma_va;
@@ -178,4 +177,17 @@ void madvise(struct mm_struct *mm, void *addr, size_t size, int flags){
 		case MADV_DONTNEED:
 			region_dealloc(container_of(mm, struct env, env_mm), addr, size);
 		}
+}
+
+int vma_protect(struct mm_struct *mm, void *addr, size_t size, int flags){
+	struct vma *vma = find_vma(addr, mm);
+	if(!vma)
+		return -1;
+	if(vma->vma_prot == flags)
+		return 0; // Nothing to do;
+	size += addr - vma->vma_va;
+	size = MIN(size, vma->vma_len);
+	vma_split(vma, addr + size);
+	vma->vma_prot = flags;
+	return 0;
 }
