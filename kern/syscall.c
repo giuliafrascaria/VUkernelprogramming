@@ -80,7 +80,7 @@ static void *sys_vma_create(size_t size, int perm, int flags)
    void* addr = find_empty_space(size, &curenv->env_mm, perm, flags);
 	 if(addr == (void*)-1)
 	 	return (void*)-1;
-   return do_map(&curenv->env_mm, NULL, addr, size, perm, flags);
+   return do_map(&curenv->env_mm, NULL, 0, addr, size, perm, flags);
 }
 
 /*

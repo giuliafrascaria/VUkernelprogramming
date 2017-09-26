@@ -33,13 +33,15 @@ enum {
 };
 
 struct vma {
-    int vma_type;
+    char vma_type;
+		char vma_prot;
     void *vma_va;
     size_t vma_len;
-    int vma_prot;
 		struct vma *vma_next;
 		struct mm_struct *vma_mm;
 		void* vma_file; // For elf binary
+		void* vma_bin_va;
+		size_t vma_bin_filesz;
     /* LAB 4: You may add more fields here, if required. */
 };
 
@@ -49,7 +51,7 @@ struct vma* find_vma(void *addr, struct mm_struct *mm);
 struct vma* find_vma_prev(void *addr, struct mm_struct *mm);
 void* find_empty_space(size_t, struct mm_struct*, int type, int prot);
 
-void* do_map(struct mm_struct *mm,  void* file, void* addr, unsigned int len,
+void* do_map(struct mm_struct *mm,  void* file, size_t filesz, void* addr, unsigned int len,
 											int prot, int type);
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len);
 

@@ -7,6 +7,11 @@
 
 void vma_map(struct vma *vma, void* va){
 	int perm = __prot2perm(vma->vma_prot);
+	if(vma->vma_type == VMA_BINARY){
+		region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
+		memcpy(vma->vma_bin_va, vma->vma_file, vma->vma_bin_filesz);
+		return;
+	}
 	region_alloc(curenv, va, PGSIZE, perm);
 }
 
@@ -31,7 +36,7 @@ struct vma* find_vma_prev(void *addr, struct mm_struct *mm){
 	return vma;
 }
 
-void *do_map(struct mm_struct *mm,  void* file, void* addr,
+void *do_map(struct mm_struct *mm,  void* file, size_t filesz, void* addr,
 	unsigned int len, int prot, int type){
 		struct vma *vma = mm->vma_free_list;
 		if(!page_free_list)
@@ -42,11 +47,10 @@ void *do_map(struct mm_struct *mm,  void* file, void* addr,
 		vma->vma_mm = mm;
 		vma->vma_prot = prot;
 		vma->vma_file = file;
+		vma->vma_bin_va = addr;
+		vma->vma_bin_filesz = filesz;
 		mm->vma_free_list = mm->vma_free_list->vma_next;
 		__inject_vma(vma, &mm->mm_vma);
-		// cprintf("CHECKING \n");
-		// for(struct vma *vv = mm->mm_vma; vv; vv = vv->vma_next)
-		// 	cprintf("mapped :: va=%p, len=%d\n",vv->vma_va, vv->vma_len);
 		++mm->mm_vma_number;
 		vma_merge(vma, vma->vma_next);
 		vma_merge(find_vma_prev(vma->vma_va, mm), vma);
@@ -57,7 +61,7 @@ void vma_merge(struct vma *first, struct vma *second){
 	// Try to merge two vma-s; if they are not mapping contiguous areas- do nothing
 	int non_mergable = !first || !second || first == second ||
 		(second->vma_va - (first->vma_va + first->vma_len) >= PGSIZE) ||
-		(first->vma_prot != second->vma_prot) ||
+		(first->vma_prot != second->vma_prot) || first->vma_type == VMA_BINARY ||
 		first->vma_type != second->vma_type;
 	if(non_mergable)
 	      return;
@@ -136,7 +140,6 @@ void* find_empty_space(size_t size, struct mm_struct *mm, int type, int prot){
 	while(vma){
 		size_t limit = (unsigned int)vma->vma_va + vma->vma_len;
 		if(!vma->vma_next && ((USTACKTOP - PGSIZE) >= (size + limit))){
-			cprintf("found empty space %p with len = %u\n", vma->vma_va + vma->vma_len + 1, size);
 			return vma->vma_va + vma->vma_len + 1;
 		}
 		if(vma->vma_next && (vma->vma_next->vma_va - limit >= (void*)size))

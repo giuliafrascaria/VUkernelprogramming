@@ -390,21 +390,16 @@ static void load_icode(struct env *e, uint8_t *binary)
 
 		ph = (struct elf_proghdr *) ((uint8_t *) elf + elf->e_phoff);
 		eph = ph + elf->e_phnum;
-		lcr3(PADDR(e->env_pgdir));
 		for (; ph < eph; ++ph){
 			if(ph->p_type != ELF_PROG_LOAD)
 				continue;
-			region_alloc(e, (void*)ph->p_va, ph->p_memsz, PTE_U | PTE_W);
-			memcpy((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
-			memset((void*)ph->p_va + ph->p_filesz, 0x0, ph->p_memsz - ph->p_filesz);
-			do_map(&e->env_mm, binary, (void*)ph->p_va, ph->p_filesz, PROT_EXEC | PROT_READ, VMA_BINARY);
+			do_map(&e->env_mm, binary + ph->p_offset, ph->p_filesz, (void*)ph->p_va, ph->p_memsz, PROT_EXEC | PROT_READ, VMA_BINARY);
 		}
-		lcr3(PADDR(kern_pgdir));
 
     /* Now map one page for the program's initial stack at virtual address
      * USTACKTOP - PGSIZE. */
 		//region_alloc(e, (void*)USTACKTOP - PGSIZE, PGSIZE);
-		 do_map(&e->env_mm, NULL, (void*)USTACKTOP - PGSIZE, PGSIZE, PROT_READ | PROT_WRITE, VMA_ANON);
+		do_map(&e->env_mm, NULL, 0, (void*)USTACKTOP - PGSIZE, PGSIZE, PROT_READ | PROT_WRITE, VMA_ANON);
 		e->env_tf.tf_eip = elf->e_entry;
     /* LAB 3: Your code here. */
 
@@ -412,8 +407,8 @@ static void load_icode(struct env *e, uint8_t *binary)
     /* vmatest binary uses the following */
     /* 1. Map one RO page of VMA for UTEMP at virtual address UTEMP.
      * 2. Map one RW page of VMA for UTEMP+PGSIZE at virtual address UTEMP. */
-		 do_map(&e->env_mm, NULL, (void*)UTEMP, PGSIZE, PROT_READ, VMA_ANON);
-		 do_map(&e->env_mm, NULL, (void*)UTEMP + PGSIZE, PGSIZE, PROT_WRITE | PROT_READ, VMA_ANON);
+		 do_map(&e->env_mm, NULL, 0, (void*)UTEMP, PGSIZE, PROT_READ, VMA_ANON);
+		 do_map(&e->env_mm, NULL, 0, (void*)UTEMP + PGSIZE, PGSIZE, PROT_WRITE | PROT_READ, VMA_ANON);
     /* LAB 4: Your code here. */
 }
 
