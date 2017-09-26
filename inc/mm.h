@@ -1,6 +1,7 @@
 #ifndef MM_H
 #define MM_H
 
+#include <inc/mmu.h>
 #include <inc/types.h>
 #include <inc/stdio.h>
 
@@ -45,8 +46,9 @@ struct vma {
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vma* find_vma(void *addr, struct mm_struct *mm);
 struct vma* find_vma_prev(void *addr, struct mm_struct *mm);
+void* find_empty_space(size_t, struct mm_struct*, int type, int prot);
 
-void * do_map(struct mm_struct *mm,  void* file, void* addr, unsigned int len,
+void* do_map(struct mm_struct *mm,  void* file, void* addr, unsigned int len,
 											int prot, int type);
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len);
 
@@ -56,14 +58,13 @@ void vma_split(struct vma *vma, void* addr);
 static inline int __prot2perm(int prot){
 	int perm = 0;
 	int writable = (prot & PROT_WRITE);
-	writable = writable && !(prot & PROT_EXEC);
+	//writable = writable && !(prot & PROT_EXEC);
 	perm = writable? PTE_W : 0;
 	perm |= PTE_U;
 	return perm;
 }
 
 static inline void __inject_vma(struct vma* vma, struct vma **hlist){
-	//cprintf("INJECTING %p\n", *hlist);
 	while(*hlist){
 		if(vma->vma_va < (*hlist)->vma_va)
 			break;

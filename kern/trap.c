@@ -255,10 +255,12 @@ void page_fault_handler(struct trapframe *tf)
 		  env_destroy(curenv);
 			panic("Trying to access kernel space from userspace");
 		}
+		if(tf->tf_err & 1) // protection fault
+			env_destroy(curenv);
 		vma = find_vma((void*)fault_va, &(curenv->env_mm));
 		if(vma){
 			int perm = __prot2perm(vma->vma_prot);
-			region_alloc(curenv, vma->vma_va, vma->vma_len, perm | PTE_W | PTE_U);
+			region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
 			return;
 		}
     /* Destroy the environment that caused the fault. */

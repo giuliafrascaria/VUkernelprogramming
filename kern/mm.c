@@ -2,6 +2,9 @@
 #include <inc/stdio.h>
 #include <inc/string.h>
 
+#include <kern/env.h>
+#include <kern/pmap.h>
+
 struct vma* find_vma(void *addr, struct mm_struct *mm){
 	struct vma *vma = mm->mm_vma;
 	while(vma){
@@ -25,11 +28,13 @@ struct vma* find_vma_prev(void *addr, struct mm_struct *mm){
 
 void *do_map(struct mm_struct *mm,  void* file, void* addr,
 	unsigned int len, int prot, int type){
-		cprintf("MAPPING %p with len %d\n", addr, len);
 		struct vma *vma = mm->vma_free_list;
+		if(!page_free_list)
+			return (void*)-1;
 		vma->vma_va = ROUNDDOWN(addr, PGSIZE);
 		vma->vma_len = ROUNDUP((len + addr) - vma->vma_va, PGSIZE);
 		vma->vma_type = type;
+		vma->vma_mm = mm;
 		vma->vma_prot = prot;
 		vma->vma_file = file;
 		mm->vma_free_list = mm->vma_free_list->vma_next;
@@ -60,23 +65,28 @@ void vma_merge(struct vma *first, struct vma *second){
 
 void vma_split(struct vma *vma, void* addr){
 	struct vma *new;
-	if( vma->vma_len - (addr - vma->vma_va) >= PGSIZE) // Nothing to split
+	if( vma->vma_len - (addr - vma->vma_va) < PGSIZE) // Nothing to split
 		return;
 	addr = ROUNDDOWN(addr, PGSIZE);
 	new = vma->vma_mm->vma_free_list;
 	vma->vma_mm->vma_free_list = vma->vma_mm->vma_free_list->vma_next;
-       	new->vma_next = vma->vma_next;
-	vma->vma_next = new;
 	new->vma_va = addr;
 	new->vma_prot = vma->vma_prot;
 	new->vma_type = vma->vma_type;
 	new->vma_len = vma->vma_len - (addr - vma->vma_va);
+	vma->vma_len = addr - vma->vma_va;
+	__inject_vma(new, &(vma->vma_mm->mm_vma));
 }
 
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 	addr = ROUNDDOWN(addr, PGSIZE);
 	len = ROUNDUP(len, PGSIZE);
 	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, addr);
+
+	if(!vma)
+		return;
+
+	region_dealloc(curenv, addr, len);
 
 	if(addr != vma->vma_va)
 		vma_split(vma, addr);
@@ -92,8 +102,36 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 	} else {
 		struct vma *to_delete = vma->vma_next;
 		vma->vma_next = to_delete->vma_next;
+		vma->vma_len -= len;
 		vma = to_delete;
 	}
 	memset(vma, 0x0, sizeof(struct vma));
 	__inject_vma(vma, &mm->vma_free_list);
+}
+
+
+void* find_empty_space(size_t size, struct mm_struct *mm, int type, int prot){
+	struct vma *vma = mm->mm_vma;
+	int vma_fit;
+	while(vma){
+		if(!vma->vma_next)
+			break;
+		vma_fit = vma->vma_type & type;
+		vma_fit &= vma->vma_prot & prot;
+		if(vma_fit && vma->vma_next->vma_va - ( vma->vma_va + vma->vma_len) >= size)
+		       return vma->vma_va + vma->vma_len + 1; // there is perfect area after vma->vma_va;
+		vma = vma->vma_next;
+	};
+
+	vma = mm->mm_vma;
+	while(vma){
+		size_t limit = (unsigned int)vma->vma_va + vma->vma_len;
+		if(!vma->vma_next && MAX_VA - limit >= PGSIZE)
+			return vma->vma_va + vma->vma_len + 1;
+		if(vma->vma_next->vma_va - limit >= (void*)size)
+			return vma->vma_va + vma->vma_len + 1;
+		vma = vma->vma_next;
+	}
+	return NULL; // There is no empty space {We don't implement swapping yet}
+
 }

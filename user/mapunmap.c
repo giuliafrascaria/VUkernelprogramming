@@ -1,5 +1,6 @@
 #include <inc/assert.h>
 #include <inc/lib.h>
+#include <inc/mm.h>
 
 #define TILE_SIZE	(4096)
 #define SWEEP_SPACE	(6 * TILE_SIZE)
@@ -10,7 +11,7 @@ void umain(int argc, char **argv)
 {
     void *va = NULL;
 
-    va = sys_vma_create(SWEEP_SPACE, PERM_W, MAP_POPULATE);
+    va = sys_vma_create(SWEEP_SPACE, PROT_WRITE, MAP_POPULATE);
 
     *((uint32_t *)va) = 0x7777;
 

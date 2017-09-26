@@ -4,7 +4,7 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
-#include <inv/mm.h>
+#include <inc/mm.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
@@ -77,10 +77,10 @@ static int sys_env_destroy(envid_t envid)
  */
 static void *sys_vma_create(size_t size, int perm, int flags)
 {
-   /* Virtual Memory Area allocation */
-
-   /* LAB 4: Your code here. */
-   return (void *)-1;
+   void* addr = find_empty_space(size, &curenv->env_mm, perm, flags);
+	 if(!addr)
+	 	return NULL;
+   return do_map(&curenv->env_mm, NULL, addr, size, perm, flags);
 }
 
 /*
@@ -89,10 +89,8 @@ static void *sys_vma_create(size_t size, int perm, int flags)
  */
 static int sys_vma_destroy(void *va, size_t size)
 {
-   /* Virtual Memory Area deallocation */
-
-   /* LAB 4: Your code here. */
-   return -1;
+	do_munmap(&curenv->env_mm, va, size);
+	return 0;
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -119,6 +117,14 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 
 			case SYS_env_destroy:
 				sys_env_destroy(a1);
+				break;
+
+			case SYS_vma_create:
+				return (unsigned int)sys_vma_create(a1, a2, a3);
+				break;
+
+			case SYS_vma_destroy:
+				sys_vma_destroy((void*)a1, a2);
 				break;
 
 		default:
