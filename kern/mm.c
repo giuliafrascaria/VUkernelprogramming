@@ -121,7 +121,7 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 }
 
 
-void* find_empty_space(size_t size, struct mm_struct *mm, int type, int prot){
+void* find_empty_space(size_t size, struct mm_struct *mm, int prot, int type){
 	struct vma *vma = mm->mm_vma;
 	int vma_fit;
 	if(!vma)
