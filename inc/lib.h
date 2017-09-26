@@ -43,6 +43,7 @@ envid_t sys_getenvid(void);
 int sys_env_destroy(envid_t);
 void *sys_vma_create(size_t size, int perm, int flags);
 int sys_vma_destroy(void *va, size_t size);
+void sys_vma_madvise(void *addr, size_t size, int flags);
 
 
 /* File open modes */

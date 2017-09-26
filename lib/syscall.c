@@ -71,3 +71,8 @@ int sys_vma_destroy(void *va, size_t size)
 {
 		return syscall(SYS_vma_destroy, 0, (unsigned int)va, size, 0, 0, 0);
 }
+
+void sys_vma_madvise(void *addr, size_t size, int flags)
+{
+		syscall(SYS_vma_madvise, 0, (unsigned int)addr, size, flags, 0, 0);
+}

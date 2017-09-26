@@ -1,18 +1,38 @@
 #include <inc/env.h>
 #include <inc/stdio.h>
 #include <inc/string.h>
+#include <inc/types.h>
 
 #include <kern/env.h>
 #include <kern/pmap.h>
 
-void vma_map(struct vma *vma, void* va){
+int vma_map(struct mm_struct *mm, void* va){
+	struct vma *vma = find_vma(va, mm);
+	if(!vma)
+		return -1;
 	int perm = __prot2perm(vma->vma_prot);
 	if(vma->vma_type == VMA_BINARY){
 		region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
 		memcpy(vma->vma_bin_va, vma->vma_file, vma->vma_bin_filesz);
-		return;
+		return 0;
 	}
 	region_alloc(curenv, va, PGSIZE, perm);
+	return 0;
+}
+
+int __vma_map(struct mm_struct *mm, void* va, size_t size){
+	struct vma *vma = find_vma(va, mm);
+	if(!vma)
+		return -1;
+	int perm = __prot2perm(vma->vma_prot);
+	if(vma->vma_type == VMA_BINARY){
+		region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
+		memcpy(vma->vma_bin_va, vma->vma_file, vma->vma_bin_filesz);
+		return 0;
+	}
+	size = MIN(size, vma->vma_len);
+	region_alloc(curenv, va, ROUNDUP(size, PGSIZE), perm);
+	return 0;
 }
 
 struct vma* find_vma(void *addr, struct mm_struct *mm){
@@ -147,5 +167,15 @@ void* find_empty_space(size_t size, struct mm_struct *mm, int prot, int type){
 		vma = vma->vma_next;
 	}
 	return (void*)-1; // There is no empty space {We don't implement swapping yet}
+}
 
+
+void madvise(struct mm_struct *mm, void *addr, size_t size, int flags){
+	switch(flags){
+		case MADV_WILLNEED:
+			__vma_map(addr, mm, size);
+			break;
+		case MADV_DONTNEED:
+			region_dealloc(container_of(mm, struct env, env_mm), addr, size);
+		}
 }

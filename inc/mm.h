@@ -26,6 +26,11 @@ enum {
 
 
 enum {
+	MADV_DONTNEED,
+	MADV_WILLNEED,
+};
+
+enum {
 	PROT_READ = 1,
 	PROT_WRITE,
 	PROT_EXEC,
@@ -45,7 +50,7 @@ struct vma {
     /* LAB 4: You may add more fields here, if required. */
 };
 
-void vma_map(struct vma *vma, void* va);
+int vma_map(struct mm_struct *mm, void* va);
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vma* find_vma(void *addr, struct mm_struct *mm);
 struct vma* find_vma_prev(void *addr, struct mm_struct *mm);
@@ -57,6 +62,8 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len);
 
 void vma_merge(struct vma *first, struct vma *second);
 void vma_split(struct vma *vma, void* addr);
+
+void madvise(struct mm_struct *mm, void *addr, size_t size, int flags);
 
 static inline int __prot2perm(int prot){
 	int perm = 0;

@@ -257,11 +257,10 @@ void page_fault_handler(struct trapframe *tf)
 		}
 		if(tf->tf_err & 1) // protection fault
 			env_destroy(curenv);
-		vma = find_vma((void*)fault_va, &(curenv->env_mm));
-		if(vma){
-			vma_map(vma, (void*)fault_va);
+
+		if(!vma_map(&(curenv->env_mm), (void*)fault_va)) // found existing vma, need to map it
 			return;
-		}
+
     /* Destroy the environment that caused the fault. */
     env_destroy(curenv);
 }
