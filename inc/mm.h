@@ -43,6 +43,7 @@ struct vma {
     /* LAB 4: You may add more fields here, if required. */
 };
 
+void vma_map(struct vma *vma, void* va);
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 struct vma* find_vma(void *addr, struct mm_struct *mm);
 struct vma* find_vma_prev(void *addr, struct mm_struct *mm);

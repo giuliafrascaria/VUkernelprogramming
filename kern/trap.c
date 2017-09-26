@@ -259,8 +259,7 @@ void page_fault_handler(struct trapframe *tf)
 			env_destroy(curenv);
 		vma = find_vma((void*)fault_va, &(curenv->env_mm));
 		if(vma){
-			int perm = __prot2perm(vma->vma_prot);
-			region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
+			vma_map(vma, (void*)fault_va);
 			return;
 		}
     /* Destroy the environment that caused the fault. */

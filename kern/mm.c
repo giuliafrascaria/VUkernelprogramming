@@ -5,6 +5,11 @@
 #include <kern/env.h>
 #include <kern/pmap.h>
 
+void vma_map(struct vma *vma, void* va){
+	int perm = __prot2perm(vma->vma_prot);
+	region_alloc(curenv, va, PGSIZE, perm);
+}
+
 struct vma* find_vma(void *addr, struct mm_struct *mm){
 	struct vma *vma = mm->mm_vma;
 	while(vma){
@@ -79,9 +84,11 @@ void vma_split(struct vma *vma, void* addr){
 }
 
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
+
 	addr = ROUNDDOWN(addr, PGSIZE);
 	len = ROUNDUP(len, PGSIZE);
-	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, addr);
+	struct vma *to_delete;
+	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, mm);
 
 	if(!vma)
 		return;
@@ -100,9 +107,9 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 			vma_prev->vma_next = vma->vma_next;
 		}
 	} else {
-		struct vma *to_delete = vma->vma_next;
+		to_delete = vma->vma_next;
 		vma->vma_next = to_delete->vma_next;
-		vma->vma_len -= len;
+		//vma->vma_len -= len;
 		vma = to_delete;
 	}
 	memset(vma, 0x0, sizeof(struct vma));
@@ -113,6 +120,8 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 void* find_empty_space(size_t size, struct mm_struct *mm, int type, int prot){
 	struct vma *vma = mm->mm_vma;
 	int vma_fit;
+	if(!vma)
+		return (void*)0x0;
 	while(vma){
 		if(!vma->vma_next)
 			break;
@@ -126,12 +135,14 @@ void* find_empty_space(size_t size, struct mm_struct *mm, int type, int prot){
 	vma = mm->mm_vma;
 	while(vma){
 		size_t limit = (unsigned int)vma->vma_va + vma->vma_len;
-		if(!vma->vma_next && MAX_VA - limit >= PGSIZE)
+		if(!vma->vma_next && ((USTACKTOP - PGSIZE) >= (size + limit))){
+			cprintf("found empty space %p with len = %u\n", vma->vma_va + vma->vma_len + 1, size);
 			return vma->vma_va + vma->vma_len + 1;
-		if(vma->vma_next->vma_va - limit >= (void*)size)
+		}
+		if(vma->vma_next && (vma->vma_next->vma_va - limit >= (void*)size))
 			return vma->vma_va + vma->vma_len + 1;
 		vma = vma->vma_next;
 	}
-	return NULL; // There is no empty space {We don't implement swapping yet}
+	return (void*)-1; // There is no empty space {We don't implement swapping yet}
 
 }
