@@ -172,7 +172,7 @@ void* find_empty_space(size_t size, struct mm_struct *mm, int prot, int type){
 void madvise(struct mm_struct *mm, void *addr, size_t size, int flags){
 	switch(flags){
 		case MADV_WILLNEED:
-			__vma_map(addr, mm, size);
+			__vma_map(mm, addr, size);
 			break;
 		case MADV_DONTNEED:
 			region_dealloc(container_of(mm, struct env, env_mm), addr, size);

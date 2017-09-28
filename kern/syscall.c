@@ -6,6 +6,7 @@
 #include <inc/assert.h>
 #include <inc/mm.h>
 
+
 #include <kern/env.h>
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -77,10 +78,13 @@ static int sys_env_destroy(envid_t envid)
  */
 static void *sys_vma_create(size_t size, int perm, int flags)
 {
-   void* addr = find_empty_space(size, &curenv->env_mm, perm, VMA_ANON);
-	 if(addr == (void*)-1)
-	 	return (void*)-1;
-   return do_map(&curenv->env_mm, NULL, 0, addr, size, perm, VMA_ANON);
+	void* addr = find_empty_space(size, &curenv->env_mm, perm, VMA_ANON);
+	if(addr == (void*)-1)
+		return (void*)-1;
+	addr = do_map(&curenv->env_mm, NULL, 0, addr, size, perm, VMA_ANON);
+	if(flags && MAP_POPULATE)
+		madvise(&curenv->env_mm, (void*)addr, size, MADV_WILLNEED);
+	return addr;
 }
 
 /*
