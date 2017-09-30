@@ -11,12 +11,15 @@ int vma_map(struct mm_struct *mm, void* va){
 	if(!vma)
 		return -1;
 	int perm = __prot2perm(vma->vma_prot);
+	region_alloc(curenv,va, PGSIZE, perm);
 	if(vma->vma_type == VMA_BINARY){
-		region_alloc(curenv, vma->vma_va, vma->vma_len, perm);
-		memcpy(vma->vma_bin_va, vma->vma_file, vma->vma_bin_filesz);
-		return 0;
+		void* start_addr = MAX(ROUNDDOWN(va, PGSIZE) , vma->vma_bin_va);
+		size_t copy_size = start_addr == vma->vma_bin_va?
+				ROUNDUP(start_addr, PGSIZE) - start_addr : ROUNDUP(va, PGSIZE) > (vma->vma_bin_va + vma->vma_bin_filesz)?
+				(vma->vma_bin_va + vma->vma_bin_filesz) - ROUNDDOWN((vma->vma_bin_va + vma->vma_bin_filesz), PGSIZE) : PGSIZE;
+		if(start_addr < (vma->vma_bin_va + vma->vma_bin_filesz))
+			memcpy(start_addr, vma->vma_file + (start_addr - vma->vma_bin_va), copy_size);
 	}
-	region_alloc(curenv, va, PGSIZE, perm);
 	return 0;
 }
 
