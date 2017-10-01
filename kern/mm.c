@@ -11,6 +11,7 @@ int vma_map(struct mm_struct *mm, void* va){
 	if(!vma)
 		return -1;
 	int perm = __prot2perm(vma->vma_prot);
+
 	region_alloc(curenv,va, PGSIZE, perm);
 	if(vma->vma_type == VMA_BINARY){
 		void* start_addr = MAX(ROUNDDOWN(va, PGSIZE) , vma->vma_bin_va);
@@ -20,6 +21,7 @@ int vma_map(struct mm_struct *mm, void* va){
 		if(start_addr < (vma->vma_bin_va + vma->vma_bin_filesz))
 			memcpy(start_addr, vma->vma_file + (start_addr - vma->vma_bin_va), copy_size);
 	}
+
 	return 0;
 }
 
