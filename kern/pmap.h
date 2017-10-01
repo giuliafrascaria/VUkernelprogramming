@@ -46,8 +46,6 @@ static inline void *_kaddr(const char *file, int line, physaddr_t pa)
     return (void *)(pa + KERNBASE);
 }
 
-
-void remove_page_free_entry(struct page_info *pp);
 static inline void add_page_free_entry(struct page_info *pp){
 	pp->pp_link = page_free_list;
 	pp->pp_flags = 0x0;

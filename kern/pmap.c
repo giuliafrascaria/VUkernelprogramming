@@ -268,18 +268,6 @@ void page_init(void)
     }
 }
 
-void remove_page_free_entry(struct page_info *pp){
-	struct page_info** head_list = &page_free_list;
-	while(*head_list){
-		if(pp == *head_list){
-			*head_list = pp->pp_link;
-			pp->pp_link = NULL;
-			return;
-		}
-		head_list = &((*head_list)->pp_link);
-	}
-}
-
 struct page_info *page_alloc(int alloc_flags)
 {
    	struct page_info *result = NULL;
@@ -290,7 +278,7 @@ struct page_info *page_alloc(int alloc_flags)
 			result = page_free_list;
 			while(result){
 				if(page2pa(result) >= 0x0 && page2pa(result) < PADDR((void*)premapped_rbound)){
-					remove_page_free_entry(result);
+					remove_entry_from_list(struct page_info, result, page_free_list, pp_link);
 					goto found_page;
 				}
 				result = result->pp_link;
@@ -310,7 +298,7 @@ struct page_info *page_alloc(int alloc_flags)
 						result = &pages[curr_page_i];
 						result->pp_flags = ALLOC_HUGE;
 						for(huge_page_i = curr_page_i; huge_page_i < PGNUM(HUGE_PGSIZE) + curr_page_i; ++huge_page_i){
-							remove_page_free_entry(&pages[huge_page_i]);
+							remove_entry_from_list(struct page_info, &pages[huge_page_i], page_free_list, pp_link);
 						}
 						goto found_page;
 					}
@@ -323,7 +311,7 @@ struct page_info *page_alloc(int alloc_flags)
 			if(!page_free_list)
 				goto release;
 			result = page_free_list;
-			remove_page_free_entry(page_free_list);
+			remove_entry_from_list(struct page_info, page_free_list, page_free_list, pp_link);
 			goto found_page;
 		}
 	found_page:
@@ -578,7 +566,7 @@ void *mmio_map_region(physaddr_t pa, size_t size)
 		mmio_base += size;
 		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
 			struct page_info *pp = pa2page(page_i);
-			remove_page_free_entry(pp);
+			remove_entry_from_list(struct page_info, pp, page_free_list, pp_link);
 			if(page_insert(kern_pgdir, pp, result + (page_i - pa), PTE_PCD | PTE_PWT | PTE_W) < 0)
 				goto err;
 		}
