@@ -621,8 +621,25 @@ void *mmio_map_region(physaddr_t pa, size_t size)
      * value will be preserved between calls to mmio_map_region
      * (just like nextfree in boot_alloc).
      */
-    static uintptr_t base = MMIOBASE;
+    static void* mmio_base;
+		void* result;
+		size = ROUNDUP(size, PGSIZE);
+		pa = ROUNDDOWN(pa, PGSIZE);
 
+		if(!mmio_base)
+			mmio_base = (void*)MMIOBASE;
+
+		if(mmio_base + size > (void*)MMIOLIM)
+			panic("Overflow MMIOLIM");
+		result = (void*)mmio_base;
+		mmio_base += size;
+		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
+			struct page_info *pp = pa2page(page_i);
+			remove_page_free_entry(pp);
+			if(page_insert(kern_pgdir, pp, result + (page_i - pa), PTE_PCD | PTE_PWT | PTE_W) < 0)
+				goto err;
+		}
+		goto success;
     /*
      * Reserve size bytes of virtual memory starting at base and map physical
      * pages [pa,pa+size) to virtual addresses [base,base+size).  Since this is
@@ -641,7 +658,16 @@ void *mmio_map_region(physaddr_t pa, size_t size)
      *
      * LAB 5: Your code here:
      */
-    panic("mmio_map_region not implemented");
+    //panic("mmio_map_region not implemented");
+	err:
+		result = NULL;
+		mmio_base -= size;
+		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
+			struct page_info *pp = pa2page(page_i);
+			page_remove(kern_pgdir, (void*)page_i);
+		}
+	success:
+		return result;
 }
 
 static uintptr_t user_mem_check_addr;
