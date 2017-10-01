@@ -76,4 +76,17 @@ typedef int32_t off_t;
         const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
         (type *)( (char *)__mptr - offsetof(type,member) );})
 
+
+#define remove_entry_from_list(type, item, head, next_link) do{ \
+	type **head_list = &head;															\
+	type *entry = item;																		\
+	while(*head_list){ 																		\
+		if(entry == *head_list){														\
+			*head_list = ((type *)entry)->next_link;					\
+			((type *)entry)->next_link = NULL;								\
+			break; 																						\
+		} 																									\
+		head_list = &((*((type **)head_list))->next_link);	\
+						}																						\
+					}while(0)
 #endif /* !JOS_INC_TYPES_H */
