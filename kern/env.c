@@ -17,6 +17,7 @@
 
 struct env *envs = NULL;            /* All environments */
 static struct env *env_free_list;   /* Free environment list */
+struct env *env_run_list;   				/* Free environment list */
                                     /* (linked by env->env_link) */
 
 #define ENVGENSHIFT 12      /* >= LOGNENV */
@@ -287,7 +288,11 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
 
     /* commit the allocation */
     env_free_list = e->env_link;
-    *newenv_store = e;
+
+		e->env_link = env_run_list;
+		env_run_list = e;
+
+		*newenv_store = e;
 		if(vma_init(e) < 0){
 			env_destroy(e);
 			return -E_NO_MEM;
@@ -491,6 +496,7 @@ void env_free(struct env *e)
 
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
+		remove_entry_from_list(struct env, e, env_run_list, env_link);
     e->env_link = env_free_list;
     env_free_list = e;
 }
