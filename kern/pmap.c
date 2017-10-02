@@ -564,13 +564,7 @@ void *mmio_map_region(physaddr_t pa, size_t size)
 			panic("Overflow MMIOLIM");
 		result = (void*)mmio_base;
 		mmio_base += size;
-		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
-			struct page_info *pp = pa2page(page_i);
-			remove_entry_from_list(struct page_info, pp, page_free_list, pp_link);
-			if(page_insert(kern_pgdir, pp, result + (page_i - pa), PTE_PCD | PTE_PWT | PTE_W) < 0)
-				goto err;
-		}
-		goto success;
+		boot_map_region(kern_pgdir, result, size, pa, PTE_PCD | PTE_PWT | PTE_W);
     /*
      * Reserve size bytes of virtual memory starting at base and map physical
      * pages [pa,pa+size) to virtual addresses [base,base+size).  Since this is
@@ -590,14 +584,6 @@ void *mmio_map_region(physaddr_t pa, size_t size)
      * LAB 5: Your code here:
      */
     //panic("mmio_map_region not implemented");
-	err:
-		result = NULL;
-		mmio_base -= size;
-		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
-			struct page_info *pp = pa2page(page_i);
-			page_remove(kern_pgdir, (void*)page_i);
-		}
-	success:
 		return result;
 }
 

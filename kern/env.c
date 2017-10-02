@@ -578,3 +578,32 @@ void env_run(struct env *e)
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
+
+int copy_vma(struct env *dest; struct env *src){
+	struct vma *vma = src->env_mm.mm_vma;
+	while(vma){
+		do_map(&dest->env_mm, vma->vma_file, vma->vma_bin_filesz, vma->vma_bin_va,
+			vma->vma_len, vma->vma_prot, vma->vma_type);
+			vma = vma->vma_next;
+	}
+}
+
+void __protect_write(pde_t *pgdir){
+	for(size_t id = 0; id < NPDENTRIES; ++id)
+		pgdir[id] &= ~PTE_W;
+}
+
+struct env *env_copy(struct env* parent){
+	struct env *child;
+
+	if(env_alloc(&child, parent->env_id) < 0)
+		return (void*)-1;
+
+	// For COW
+	__protect_write(parent->env_pgdir);
+	memcpy(child->env_pgdir, parent->env_pgdir,  sizeof(pde_t*) *  NPDENTRIES);
+	child->env_tf = parent->tf;
+	copy_vma(child, parent);
+	child->env_status = ENV_RUNNABLE;
+	return child;
+}

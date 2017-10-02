@@ -19,7 +19,7 @@ void env_create(uint8_t *binary, enum env_type type);
 void env_destroy(struct env *e); /* Does not return if e == curenv */
 void region_alloc(struct env *e, void *va, size_t len, int perm);
 void region_dealloc(struct env *e, void* va, size_t len);
-
+struct env *env_copy(struct env*);
 int  envid2env(envid_t envid, struct env **env_store, bool checkperm);
 /* The following two functions do not return */
 void env_run(struct env *e) __attribute__((noreturn));
