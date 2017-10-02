@@ -94,6 +94,8 @@ void trap_init(void)
 		SETGATE(idt[T_MCHK], 0, GD_KT, machine_check_intr, 0);
 		SETGATE(idt[T_SIMDERR], 0, GD_KT, smid_excpt_intr, 0);
 
+		SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, timer_intr, 0);
+
 		SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call_intr, 3);
     /* Per-CPU setup */
     trap_init_percpu();
@@ -186,8 +188,10 @@ static void trap_dispatch(struct trapframe *tf)
      */
 
     /* Unexpected trap: The user process or the kernel has a bug. */
-
-		if(tf->tf_trapno == T_PGFLT){
+		if(tf->tf_trapno == (IRQ_OFFSET + IRQ_TIMER)){
+			lapic_eoi();
+			sched_yield();
+		} else if(tf->tf_trapno == T_PGFLT){
 			page_fault_handler(tf);
 			return;
 		} else if( tf->tf_trapno == T_BRKPT){
@@ -213,6 +217,7 @@ void trap(struct trapframe *tf)
     /* The environment may have set DF and some versions of GCC rely on DF being
      * clear. */
     asm volatile("cld" ::: "cc");
+    asm volatile("cli" :::);
 
     /* Halt the CPU if some other CPU has called panic(). */
     extern char *panicstr;

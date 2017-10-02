@@ -49,6 +49,8 @@
  * Lab 3: Your code here for generating entry points for the different traps.
  */
 
+TRAPHANDLER_NOEC(timer_intr, IRQ_OFFSET + IRQ_TIMER);
+
 TRAPHANDLER_NOEC(devide_zero_intr, 0);
 TRAPHANDLER_NOEC(debug_exception_intr, 1);
 TRAPHANDLER_NOEC(non_maskable_intr, 2);
@@ -86,4 +88,3 @@ _alltraps:
 	popl %es;
 	pushl %esp;
 	call trap;
-	

@@ -34,18 +34,20 @@ void sched_yield(void)
 		struct env *e = curenv && curenv->env_link? curenv->env_link : env_run_list;
 
 		while(e){
-			if(xchg(&e->env_status, ENV_RUNNING) == ENV_RUNNABLE)
+			if(e == curenv)
 				env_run(e);
+			int status = xchg(&e->env_status, ENV_RUNNING);
+			if(status == ENV_RUNNABLE)
+				env_run(e);
+			e->env_status = status;
 			if(!e->env_link)
 				e = env_run_list;
 			else
 			 	e = e->env_link;
-			if(e == curenv)
-				break;
 		}
 
     /* sched_halt never returns */
-    sched_halt();
+		sched_halt();
 }
 
 /*
