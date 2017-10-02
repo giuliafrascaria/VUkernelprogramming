@@ -170,6 +170,10 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 			case SYS_vma_protect:
 				sys_vma_protect(a1, a2, a3);
 				break;
+
+			case SYS_yield:
+				sys_yield();
+				break;
 		default:
         return -E_NO_SYS;
     }

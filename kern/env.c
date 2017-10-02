@@ -287,9 +287,6 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     /* commit the allocation */
     env_free_list = e->env_link;
 
-		e->env_link = env_run_list;
-		env_run_list = e;
-
 		*newenv_store = e;
 		if(vma_init(e) < 0){
 			env_destroy(e);
@@ -439,6 +436,10 @@ void env_create(uint8_t *binary, enum env_type type)
 			panic("Cannot create first user-mode environment");
 		env->env_type = type;
 		load_icode(env, binary);
+
+		env->env_link = env_run_list;
+		env_run_list = env;
+		env->env_status = ENV_RUNNABLE;
 }
 
 /*
@@ -488,7 +489,7 @@ void env_free(struct env *e)
     page_decref(pa2page(pa));
 
     /* Free VMA list. */
-    pa = PADDR(e->env_vmas);
+    pa = PADDR(e->env_mm.mm_common_vma);
     e->env_vmas = 0;
     page_decref(pa2page(pa));
 
@@ -579,13 +580,14 @@ void env_run(struct env *e)
     /* LAB 3: Your code here. */
 }
 
-int copy_vma(struct env *dest; struct env *src){
+int copy_vma(struct env *dest, struct env *src){
 	struct vma *vma = src->env_mm.mm_vma;
 	while(vma){
-		do_map(&dest->env_mm, vma->vma_file, vma->vma_bin_filesz, vma->vma_bin_va,
+		do_map(&(dest->env_mm), vma->vma_file, vma->vma_bin_filesz, vma->vma_bin_va,
 			vma->vma_len, vma->vma_prot, vma->vma_type);
 			vma = vma->vma_next;
 	}
+	return 0;
 }
 
 void __protect_write(pde_t *pgdir){
@@ -602,7 +604,7 @@ struct env *env_copy(struct env* parent){
 	// For COW
 	__protect_write(parent->env_pgdir);
 	memcpy(child->env_pgdir, parent->env_pgdir,  sizeof(pde_t*) *  NPDENTRIES);
-	child->env_tf = parent->tf;
+	child->env_tf = parent->env_tf;
 	copy_vma(child, parent);
 	child->env_status = ENV_RUNNABLE;
 	return child;

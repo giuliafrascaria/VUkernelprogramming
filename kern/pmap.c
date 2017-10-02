@@ -564,7 +564,7 @@ void *mmio_map_region(physaddr_t pa, size_t size)
 			panic("Overflow MMIOLIM");
 		result = (void*)mmio_base;
 		mmio_base += size;
-		boot_map_region(kern_pgdir, result, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+		boot_map_region(kern_pgdir, (unsigned int)result, size, pa, PTE_PCD | PTE_PWT | PTE_W);
     /*
      * Reserve size bytes of virtual memory starting at base and map physical
      * pages [pa,pa+size) to virtual addresses [base,base+size).  Since this is
