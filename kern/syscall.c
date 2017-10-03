@@ -124,7 +124,7 @@ static int sys_wait(envid_t envid)
 
 static int sys_fork(void)
 {
-    return (int)env_copy(curenv);
+    return env_copy(curenv)->env_id;
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
