@@ -48,9 +48,13 @@ void sched_yield(void)
 			 	e = e->env_link;
 		}
 
+
+
     /* sched_halt never returns */
 		sched_halt();
 }
+
+
 
 /*
  * Halt this CPU when there is nothing to do. Wait until the timer interrupt
