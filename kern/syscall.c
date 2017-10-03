@@ -124,9 +124,7 @@ static int sys_wait(envid_t envid)
 
 static int sys_fork(void)
 {
-    /* fork() that follows COW semantics */
-    /* LAB 5: Your code here */
-    return -1;
+    return (int)env_copy(curenv);
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -174,6 +172,12 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 			case SYS_yield:
 				sys_yield();
 				break;
+
+
+			case SYS_fork:
+				return sys_fork();
+				break;
+
 		default:
         return -E_NO_SYS;
     }

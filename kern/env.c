@@ -570,12 +570,15 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
+		 if(curenv == e)
+		 	goto start_env;;
 		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
 		 curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
 		 lcr3(PADDR(curenv->env_pgdir));
+	start_env:
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
