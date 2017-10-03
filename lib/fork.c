@@ -5,5 +5,7 @@
 
 envid_t fork(void)
 {
-    return sys_fork();
+    int res = sys_fork();
+		thisenv = &((struct env*)UENVS)[ENVX(sys_getenvid())];
+  	return res;
 }

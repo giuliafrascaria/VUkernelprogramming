@@ -178,6 +178,10 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 				return sys_fork();
 				break;
 
+			case SYS_wait:
+				return sys_wait(a1);
+				break;
+
 		default:
         return -E_NO_SYS;
     }

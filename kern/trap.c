@@ -302,6 +302,7 @@ void page_fault_handler(struct trapframe *tf)
 				curenv->env_id, fault_va, tf->tf_eip);
 		print_trapframe(tf);
 
+
 		if(tf->tf_cs == GD_KT)
 			panic("Kernel space page fault");
 
@@ -309,8 +310,25 @@ void page_fault_handler(struct trapframe *tf)
 		  env_destroy(curenv);
 			panic("Trying to access kernel space from userspace");
 		}
-		if(tf->tf_err & 1) // protection fault
-			env_destroy(curenv);
+
+		if(tf->tf_err & 1) {// protection fault
+			vma = find_vma((void*)fault_va, &curenv->env_mm);
+			if(vma && (vma->vma_prot & PROT_WRITE) ){
+				// COW
+				if(page_lookup(curenv->env_pgdir, (void*)fault_va, NULL)->pp_ref > 1){
+					// we should copy page because of something reference to it
+					char buf[PGSIZE];
+					memcpy(buf, (void*)ROUNDDOWN(fault_va, PGSIZE), PGSIZE);
+					vma_map(&curenv->env_mm, (void*)fault_va);
+					memcpy((void*)ROUNDDOWN(fault_va, PGSIZE), buf, PGSIZE);
+				} else {
+					__make_writable(curenv->env_pgdir, (void*)fault_va);
+				}
+				return;
+			} else {
+				env_destroy(curenv);
+			}
+		}
 
 		if(!vma_map(&(curenv->env_mm), (void*)fault_va)) // found existing vma, need to map it
 			return;

@@ -571,7 +571,7 @@ void env_run(struct env *e)
      *  e->env_tf to sensible values.
      */
 		 if(curenv == e)
-		 	goto start_env;;
+		 	goto start_env;
 		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
@@ -595,11 +595,21 @@ int copy_vma(struct env *dest, struct env *src){
 
 void __protect_write(pde_t *pgdir){
 	for(size_t id = 0; id < NPDENTRIES; ++id){
+		if(!(pgdir[id] & PTE_W))
+			continue;
 		pte_t *table = pgdir_walk(pgdir, (void*)(id << 22), 0);
 		for(size_t table_id = 0; table_id < NPTENTRIES; ++table_id){
-			table[table_id] &= ~PTE_W;
+			if((id << 22 | table_id << 12) <= USTACKTOP - PGSIZE){
+				table[table_id] &= ~PTE_W;
+				++(pa2page(PTE_ADDR(table[table_id]))->pp_ref);
+			}
 		}
 	}
+}
+
+void __make_writable(pde_t *pgdir, void *va){
+	pte_t *pte = pgdir_walk(pgdir, va, 0);
+	*pte |= PTE_W;
 }
 
 struct env *env_copy(struct env* parent){
@@ -618,7 +628,7 @@ struct env *env_copy(struct env* parent){
 	env_run_list = child;
 	child->env_type = parent->env_type;
 
-	child->env_status = ENV_RUNNABLE;
 	child->env_tf.tf_regs.reg_eax = 0;
+	child->env_status = ENV_RUNNABLE;
 	return child;
 }

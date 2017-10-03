@@ -11,6 +11,8 @@ extern struct env *env_run_list;            /* All runnable environments */
 #define curenv (thiscpu->cpu_env)   /* Current environment */
 extern struct segdesc gdt[];
 
+void __make_writable(pde_t*, void*);
+
 void env_init(void);
 void env_init_percpu(void);
 int  env_alloc(struct env **e, envid_t parent_id);
