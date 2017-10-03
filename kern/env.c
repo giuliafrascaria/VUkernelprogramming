@@ -610,5 +610,6 @@ struct env *env_copy(struct env* parent){
 	child->env_tf = parent->env_tf;
 	copy_vma(child, parent);
 	child->env_status = ENV_RUNNABLE;
+	child->env_tf.tf_regs.reg_eax = 0;
 	return child;
 }
