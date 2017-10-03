@@ -29,6 +29,8 @@ void env_pop_tf(struct trapframe *tf) __attribute__((noreturn));
  * because of the C pre-processor's argument prescan rule. */
 #define ENV_PASTE3(x, y, z) x ## y ## z
 
+#define TS_DEFAULT 1000
+
 #define ENV_CREATE(x, type)                                     \
     do {                                                        \
         extern uint8_t ENV_PASTE3(_binary_obj_, x, _start)[];   \

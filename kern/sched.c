@@ -31,27 +31,40 @@ void sched_yield(void)
      *
      * LAB 5: Your code here.
      */
-		struct env *e = curenv && curenv->env_link? curenv->env_link : env_run_list;
+     struct env *e = curenv && curenv->env_link? curenv->env_link : env_run_list;
 
-		if(curenv)
-			curenv->env_status = ENV_RUNNABLE;
-		while(e){
-			if(e == curenv)
-				env_run(e);
-			int status = xchg(&e->env_status, ENV_RUNNING);
-			if(status == ENV_RUNNABLE)
-				env_run(e);
-			e->env_status = status;
-			if(!e->env_link)
-				e = env_run_list;
-			else
-			 	e = e->env_link;
-		}
+     uint64_t ref_time;
 
+ 		if(curenv){
 
+         if(read_tsc() - curenv->env_ts < TS_DEFAULT)
+             env_run(curenv);
+         else
+             curenv->env_status = ENV_RUNNABLE;
 
-    /* sched_halt never returns */
-		sched_halt();
+     }
+
+       //decrement env time slice of elapsed time
+
+ 		while(e){
+ 			if(e == curenv)
+ 				env_run(e);
+ 			int status = xchg(&e->env_status, ENV_RUNNING);
+
+ 			if(status == ENV_RUNNABLE){
+         e->env_ts = read_tsc();  //time stamp of the first time I am scheduled
+         env_run(e);
+       }
+
+ 			e->env_status = status;
+ 			if(!e->env_link)
+ 				e = env_run_list;
+ 			else
+ 			 	e = e->env_link;
+ 		}
+
+     /* sched_halt never returns */
+ 		sched_halt();
 }
 
 
