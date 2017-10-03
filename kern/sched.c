@@ -33,6 +33,8 @@ void sched_yield(void)
      */
 		struct env *e = curenv && curenv->env_link? curenv->env_link : env_run_list;
 
+		if(curenv)
+			curenv->env_status = ENV_RUNNABLE;
 		while(e){
 			if(e == curenv)
 				env_run(e);

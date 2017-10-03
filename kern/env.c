@@ -594,8 +594,12 @@ int copy_vma(struct env *dest, struct env *src){
 }
 
 void __protect_write(pde_t *pgdir){
-	for(size_t id = 0; id < NPDENTRIES; ++id)
-		pgdir[id] &= ~PTE_W;
+	for(size_t id = 0; id < NPDENTRIES; ++id){
+		pte_t *table = pgdir_walk(pgdir, (void*)(id << 22), 0);
+		for(size_t table_id = 0; table_id < NPTENTRIES; ++table_id){
+			table[table_id] &= ~PTE_W;
+		}
+	}
 }
 
 struct env *env_copy(struct env* parent){
@@ -609,6 +613,11 @@ struct env *env_copy(struct env* parent){
 	memcpy(child->env_pgdir, parent->env_pgdir,  sizeof(pde_t*) *  NPDENTRIES);
 	child->env_tf = parent->env_tf;
 	copy_vma(child, parent);
+
+	child->env_link = env_run_list;
+	env_run_list = child;
+	child->env_type = parent->env_type;
+
 	child->env_status = ENV_RUNNABLE;
 	child->env_tf.tf_regs.reg_eax = 0;
 	return child;

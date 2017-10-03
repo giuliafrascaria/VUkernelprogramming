@@ -53,4 +53,3 @@ void umain(int argc, char **argv)
     }
     cprintf("cowforktest completed.\n");
 }
-
