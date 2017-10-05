@@ -283,13 +283,10 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
 
     /* Enable interrupts while in user mode.
      * LAB 5: Your code here. */
-
+		 e->env_tf.tf_eflags = FL_IF;
 
     /* commit the allocation */
-    env_free_list = e->env_link;
-
-		e->env_link = env_run_list;
-		env_run_list = e;
+    remove_entry_from_list(struct env, e, env_free_list, env_link);
 
 		*newenv_store = e;
 		if(vma_init(e) < 0){
@@ -437,7 +434,9 @@ void env_create(uint8_t *binary, enum env_type type)
 		struct env *env;
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
-		e->env_status = ENV_RUNNABLE;
+		env->env_status = ENV_RUNNABLE;
+		env->env_link = env_run_list;
+		env_run_list = env;
 		env->env_type = type;
 		load_icode(env, binary);
 }
@@ -489,8 +488,8 @@ void env_free(struct env *e)
     page_decref(pa2page(pa));
 
     /* Free VMA list. */
-    pa = PADDR(e->env_vmas);
-    e->env_vmas = 0;
+    pa = PADDR(e->env_mm.mm_common_vma);
+    e->env_mm.mm_common_vma = 0;
     page_decref(pa2page(pa));
 
     /* return the environment to the free list */
@@ -579,4 +578,60 @@ void env_run(struct env *e)
 		 lcr3(PADDR(curenv->env_pgdir));
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
+}
+
+void __protect_cow(pde_t *pgdir){
+	for(size_t pg_i = 0; pg_i < PDX(UTOP - PGSIZE) + 1; ++pg_i){
+		for(size_t tb_i = 0; tb_i < NPTENTRIES; ++tb_i){
+			struct page_info *pp;
+			pte_t *pte;
+			void *va = (void*)(pg_i << 22 | tb_i << 12);
+			if(va > (void*)(UTOP - PGSIZE))
+				break; // End of User space
+			pte = pgdir_walk(pgdir, va, 0);
+			if(pte && *pte & PTE_P){
+				pp = page_lookup(pgdir, va, NULL);
+				++pp->pp_ref;
+				*pte &= ~PTE_W;
+			}
+		}
+	}
+}
+
+void __copy_pgdir(pde_t *child, pde_t *parent){
+	for(size_t pg_i = 0; pg_i <= PDX(UTOP - PGSIZE); ++pg_i){
+		void *va = (void*)(pg_i << 22);
+		struct page_info *pp;
+		pte_t *pte = pgdir_walk(parent, va, 0);
+		if(!pte)
+			continue;
+		size_t pg_size = parent[pg_i] & PTE_PS? HUGE_PGSIZE : PGSIZE;
+		int pg_flags =  ALLOC_ZERO | ALLOC_PREMAPPED | (parent[pg_i] & PTE_PS? ALLOC_HUGE : 0);
+		pp = page_alloc(pg_flags);
+		if(!pp)
+			panic("Cannot allocate memory for new process");
+		memcpy(page2kva(pp), pte, pg_size);
+		child[pg_i] = page2pa(pp) | (parent[pg_i] & 0xFFF);
+		}
+}
+
+void __copy_vma(struct mm_struct *child, struct mm_struct *parent){
+		memcpy(child->mm_common_vma, parent->mm_common_vma, PGSIZE);
+		child->mm_vma = parent->mm_vma;
+}
+
+envid_t copy_env(struct env *parent, int flags){
+	// Still don't have flags, but keeping them for future
+	struct env *child;
+	if(env_alloc(&child, parent->env_id) < 0)
+		return -E_NO_MEM;
+	__protect_cow(parent->env_pgdir);
+	__copy_pgdir(child->env_pgdir, parent->env_pgdir);
+	__copy_vma(&child->env_mm, &parent->env_mm);
+	child->env_tf = parent->env_tf;
+	child->env_tf.tf_regs.reg_eax = 0; // Return value from fork for child process
+	child->env_link = env_run_list;
+	env_run_list = child;
+	child->env_status = ENV_RUNNABLE;
+	return child->env_id;
 }
