@@ -56,7 +56,7 @@ struct env {
     unsigned env_status;        /* Status of the environment */
     uint32_t env_runs;          /* Number of times environment has run */
     int env_cpunum;             /* The CPU that the env is running on */
-
+		struct env *env_wait_list;      /* Linked list of all envs which wait for this env */
     /* Address space */
     pde_t *env_pgdir;           /* Kernel virtual address of page dir */
     struct vma *env_vmas;       /* Virtual memory areas of this env. */
