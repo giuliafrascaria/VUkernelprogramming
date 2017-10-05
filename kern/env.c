@@ -255,7 +255,6 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     /* Set the basic status variables. */
     e->env_parent_id = parent_id;
     e->env_type = ENV_TYPE_USER;
-    e->env_status = ENV_RUNNABLE;
     e->env_runs = 0;
 
     /*
@@ -439,6 +438,7 @@ void env_create(uint8_t *binary, enum env_type type)
 		struct env *env;
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
+		e->env_status = ENV_RUNNABLE;
 		env->env_type = type;
 		load_icode(env, binary);
 }
