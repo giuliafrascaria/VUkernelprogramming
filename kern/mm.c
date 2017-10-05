@@ -23,6 +23,10 @@ int vma_map(struct mm_struct *mm, void* va){
 	pg_size = pte && (*pte & PTE_PS)? HUGE_PGSIZE : PGSIZE;
 	pg_flags = ALLOC_PREMAPPED | (pte && (*pte & PTE_PS)? ALLOC_HUGE : 0);
 
+	// Simple protection fail
+	if(pte && (*pte & PTE_P) && !(vma->vma_prot & PROT_WRITE))
+		return -1;
+
 		// COW section
 	if(pte && (*pte & PTE_P) && (vma->vma_prot & PROT_WRITE) && ((~*pte) & PTE_W)){
 		struct page_info *pp = page_lookup(env->env_pgdir, va, NULL);

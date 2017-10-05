@@ -24,6 +24,8 @@ int  envid2env(envid_t envid, struct env **env_store, bool checkperm);
 /* The following two functions do not return */
 void env_run(struct env *e) __attribute__((noreturn));
 void env_pop_tf(struct trapframe *tf) __attribute__((noreturn));
+void attach_wait(struct env*, struct env*);
+void dettach_wait(struct env*, struct env*);
 
 /* Without this extra macro, we couldn't pass macros like TEST to ENV_CREATE
  * because of the C pre-processor's argument prescan rule. */

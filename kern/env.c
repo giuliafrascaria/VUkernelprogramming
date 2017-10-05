@@ -493,6 +493,13 @@ void env_free(struct env *e)
     e->env_mm.mm_common_vma = 0;
     page_decref(pa2page(pa));
 
+		/* Free all waiting envs */
+		struct env *tmp = e->env_wait_list;
+		while(tmp){
+			dettach_wait(tmp, e);
+			tmp = tmp->env_link;
+		}
+
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
@@ -635,4 +642,19 @@ envid_t copy_env(struct env *parent, int flags){
 	env_run_list = child;
 	child->env_status = ENV_RUNNABLE;
 	return child->env_id;
+}
+
+
+void attach_wait(struct env *cur, struct env *attach_to){
+	cur->env_status = ENV_NOT_RUNNABLE;
+	remove_entry_from_list(struct env, cur, env_run_list, env_link);
+	cur->env_link = attach_to->env_wait_list;
+	attach_to->env_wait_list = cur;
+}
+
+void dettach_wait(struct env *cur, struct env *dettach_from){
+	remove_entry_from_list(struct env, cur, dettach_from->env_wait_list, env_link);
+	cur->env_link = env_run_list;
+	env_run_list = cur;
+	cur->env_status = ENV_RUNNABLE;
 }

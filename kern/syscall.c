@@ -136,6 +136,7 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
      * Return any appropriate return value.
      * LAB 3: Your code here.
      */
+		struct env *to_wait;
 
     switch (syscallno) {
 			case SYS_cputs:
@@ -171,6 +172,11 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 
 			case SYS_fork:
 				return sys_fork();
+				break;
+
+			case SYS_wait:
+			to_wait = &envs[ENVX(a1)];
+				attach_wait(curenv, to_wait);
 				break;
 		default:
         return -E_NO_SYS;
