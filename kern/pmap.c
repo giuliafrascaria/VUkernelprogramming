@@ -469,7 +469,7 @@ pte_t *pgdir_walk(pde_t *pgdir, const void *va, int create)
  *
  * Hint: the TA solution uses pgdir_walk
  */
-static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
+void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 		pte_t *pte;
     for(size_t item = 0; item < size; item += PGSIZE){
@@ -621,14 +621,9 @@ void *mmio_map_region(physaddr_t pa, size_t size)
 			panic("Overflow MMIOLIM");
 		result = (void*)mmio_base;
 		mmio_base += size;
-		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
-			struct page_info *pp = pa2page(page_i);
-			remove_entry_from_list(struct page_info, pp, page_free_list, pp_link);
-			if(page_insert(kern_pgdir, pp, result + (page_i - pa), PTE_PCD | PTE_PWT | PTE_W) < 0)
-				goto err;
-		}
-		goto success;
-    /*
+		boot_map_region(kern_pgdir, (unsigned int)result, size, pa, PTE_W | PTE_PCD | PTE_PWT | PTE_P);
+		return result;
+		/*
      * Reserve size bytes of virtual memory starting at base and map physical
      * pages [pa,pa+size) to virtual addresses [base,base+size).  Since this is
      * device memory and not regular DRAM, you'll have to tell the CPU that it
@@ -647,15 +642,6 @@ void *mmio_map_region(physaddr_t pa, size_t size)
      * LAB 5: Your code here:
      */
     //panic("mmio_map_region not implemented");
-	err:
-		result = NULL;
-		mmio_base -= size;
-		for(size_t page_i = pa; page_i < pa + size; page_i += PGSIZE){
-			struct page_info *pp = pa2page(page_i);
-			page_remove(kern_pgdir, (void*)page_i);
-		}
-	success:
-		return result;
 }
 
 static uintptr_t user_mem_check_addr;

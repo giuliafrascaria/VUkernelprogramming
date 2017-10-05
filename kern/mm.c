@@ -8,9 +8,37 @@
 
 int vma_map(struct mm_struct *mm, void* va){
 	struct vma *vma = find_vma(va, mm);
+	struct env *env;
+	pte_t *pte;
+	int perm;
+	int pg_flags;
+	size_t pg_size;
+
 	if(!vma)
 		return -1;
-	int perm = __prot2perm(vma->vma_prot);
+
+	env = container_of(mm, struct env, env_mm);
+	pte = pgdir_walk(env->env_pgdir, va, 0);
+	perm = __prot2perm(vma->vma_prot);
+	pg_size = pte && (*pte & PTE_PS)? HUGE_PGSIZE : PGSIZE;
+	pg_flags = ALLOC_PREMAPPED | (pte && (*pte & PTE_PS)? ALLOC_HUGE : 0);
+
+		// COW section
+	if(pte && (*pte & PTE_P) && (vma->vma_prot & PROT_WRITE) && ((~*pte) & PTE_W)){
+		struct page_info *pp = page_lookup(env->env_pgdir, va, NULL);
+		if(pp->pp_ref == 1){
+			// last env, don't need to copy page
+			*pte |= perm;
+		} else {
+			// not last env
+			pp = page_alloc(pg_flags);
+			memcpy(page2kva(pp), KADDR(PTE_ADDR(*pte)), pg_size);
+			page_insert(env->env_pgdir, pp, va, perm);
+		}
+		return 0;
+	}
+
+	// Mapping unmapped area;
 	region_alloc(curenv,va, PGSIZE, perm);
 	if(vma->vma_type == VMA_BINARY){
 		void* start_addr = MAX(ROUNDDOWN(va, PGSIZE) , vma->vma_bin_va);

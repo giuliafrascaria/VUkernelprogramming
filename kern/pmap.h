@@ -75,6 +75,8 @@ void page_remove(pde_t *pgdir, void *va);
 struct page_info *page_lookup(pde_t *pgdir, void *va, pte_t **pte_store);
 void page_decref(struct page_info *pp);
 
+void boot_map_region(pde_t*, uintptr_t, size_t, physaddr_t, int);
+
 void tlb_invalidate(pde_t *pgdir, void *va);
 
 void *mmio_map_region(physaddr_t pa, size_t size);

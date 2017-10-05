@@ -5,6 +5,7 @@
 
 envid_t fork(void)
 {
-    /* LAB 5: Your code here. */
-    panic("fork not implemented");
+   int res = sys_fork();
+	 thisenv = &((struct env*)UENVS)[ENVX(sys_getenvid())];
+	 return res;
 }

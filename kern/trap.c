@@ -75,11 +75,11 @@ void trap_init(void)
     extern struct segdesc gdt[];
 
     /* LAB 3: Your code here. */
-		SETGATE(idt[T_DIVIDE], 1, GD_KT, devide_zero_intr, 0);
-		SETGATE(idt[T_DEBUG], 1, GD_KT, debug_exception_intr, 0);
+		SETGATE(idt[T_DIVIDE], 0, GD_KT, devide_zero_intr, 0);
+		SETGATE(idt[T_DEBUG], 0, GD_KT, debug_exception_intr, 0);
 		SETGATE(idt[T_NMI], 0, GD_KT, non_maskable_intr, 0);
-		SETGATE(idt[T_BRKPT], 1, GD_KT, break_point_intr, 3);
-		SETGATE(idt[T_OFLOW], 1, GD_KT, overflow_intr, 0);
+		SETGATE(idt[T_BRKPT], 0, GD_KT, break_point_intr, 3);
+		SETGATE(idt[T_OFLOW], 0, GD_KT, overflow_intr, 0);
 		SETGATE(idt[T_BOUND], 0, GD_KT, bound_range_exceeded_intr, 0);
 		SETGATE(idt[T_ILLOP], 0, GD_KT, invalid_opcode_intr, 0);
 		SETGATE(idt[T_DEVICE], 0, GD_KT, device_not_avail_intr, 0);
@@ -93,6 +93,8 @@ void trap_init(void)
 		SETGATE(idt[T_ALIGN], 0, GD_KT, aligment_check_intr, 0);
 		SETGATE(idt[T_MCHK], 0, GD_KT, machine_check_intr, 0);
 		SETGATE(idt[T_SIMDERR], 0, GD_KT, smid_excpt_intr, 0);
+
+		SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, timer_intr, 0);
 
 		SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call_intr, 3);
     /* Per-CPU setup */
@@ -215,6 +217,9 @@ static void trap_dispatch(struct trapframe *tf)
 		if(tf->tf_trapno == T_PGFLT){
 			page_fault_handler(tf);
 			return;
+		} else if(tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
+			lapic_eoi();
+			sched_yield();
 		} else if( tf->tf_trapno == T_BRKPT){
 			breakpoint_handler(tf);
 			return;
@@ -329,8 +334,6 @@ void page_fault_handler(struct trapframe *tf)
 		  env_destroy(curenv);
 			panic("Trying to access kernel space from userspace");
 		}
-		if(tf->tf_err & 1) // protection fault
-			env_destroy(curenv);
 
 		if(!vma_map(&(curenv->env_mm), (void*)fault_va)) // found existing vma, need to map it
 			return;
