@@ -124,9 +124,7 @@ static int sys_wait(envid_t envid)
 
 static int sys_fork(void)
 {
-    /* fork() that follows COW semantics */
-    /* LAB 5: Your code here */
-    return -1;
+   return copy_env(curenv, 0);
 }
 
 /* Dispatches to the correct kernel function, passing the arguments. */
@@ -169,6 +167,10 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 
 			case SYS_vma_protect:
 				sys_vma_protect(a1, a2, a3);
+				break;
+
+			case SYS_fork:
+				return sys_fork();
 				break;
 		default:
         return -E_NO_SYS;
