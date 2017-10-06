@@ -175,8 +175,9 @@ int32_t syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3,
 				break;
 
 			case SYS_wait:
-			to_wait = &envs[ENVX(a1)];
-				attach_wait(curenv, to_wait);
+				to_wait = &envs[ENVX(a1)];
+				if(to_wait->env_status == ENV_RUNNING || to_wait->env_status == ENV_RUNNABLE )
+					attach_wait(curenv, to_wait);
 				break;
 		default:
         return -E_NO_SYS;

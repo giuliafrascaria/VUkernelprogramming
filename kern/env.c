@@ -487,17 +487,16 @@ void env_free(struct env *e)
     pa = PADDR(e->env_pgdir);
     e->env_pgdir = 0;
     page_decref(pa2page(pa));
-
     /* Free VMA list. */
     pa = PADDR(e->env_mm.mm_common_vma);
     e->env_mm.mm_common_vma = 0;
     page_decref(pa2page(pa));
-
 		/* Free all waiting envs */
 		struct env *tmp = e->env_wait_list;
 		while(tmp){
+			struct env *next = tmp->env_link;
 			dettach_wait(tmp, e);
-			tmp = tmp->env_link;
+			tmp = next;
 		}
 
     /* return the environment to the free list */
@@ -601,6 +600,7 @@ void __protect_cow(pde_t *pgdir){
 				pp = page_lookup(pgdir, va, NULL);
 				++pp->pp_ref;
 				*pte &= ~PTE_W;
+				tlb_invalidate(pgdir, va);
 			}
 		}
 	}
