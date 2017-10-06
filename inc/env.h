@@ -31,6 +31,7 @@ typedef int32_t envid_t;
 #define LOG2NENV        10
 #define NENV            (1 << LOG2NENV)
 #define ENVX(envid)     ((envid) & (NENV - 1))
+#define DEFAULT_ENV_TS 1000
 
 /* Values of env_status in struct env */
 enum {
@@ -60,6 +61,7 @@ struct env {
     /* Address space */
     pde_t *env_pgdir;           /* Kernel virtual address of page dir */
     struct vma *env_vmas;       /* Virtual memory areas of this env. */
+		uint64_t env_ts;
 };
 
 #endif /* !JOS_INC_ENV_H */
