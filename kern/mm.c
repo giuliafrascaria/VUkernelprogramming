@@ -16,7 +16,6 @@ int vma_map(struct mm_struct *mm, void* va){
 
 	if(!vma)
 		return -1;
-
 	env = container_of(mm, struct env, env_mm);
 	pte = pgdir_walk(env->env_pgdir, va, 0);
 	perm = __prot2perm(vma->vma_prot);
@@ -142,36 +141,35 @@ void vma_split(struct vma *vma, void* addr){
 }
 
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
-
 	addr = ROUNDDOWN(addr, PGSIZE);
 	len = ROUNDUP(len, PGSIZE);
 	struct vma *to_delete;
-	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, mm);
-
+	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, mm), *vma_end;
 	if(!vma)
 		return;
-
 	region_dealloc(curenv, addr, len);
-
-	if(addr != vma->vma_va)
+	if(addr != vma->vma_va){
 		vma_split(vma, addr);
-	if(vma->vma_next->vma_len > len)
-		vma_split(vma->vma_next, vma->vma_next->vma_va + len);
-	if(addr == vma->vma_va){
-		if(vma_prev == vma){
-			// vma is in the beginning of vma_list;
-			mm->mm_vma = vma->vma_next;
-		} else {
-			vma_prev->vma_next = vma->vma_next;
-		}
-	} else {
-		to_delete = vma->vma_next;
-		vma->vma_next = to_delete->vma_next;
-		//vma->vma_len -= len;
-		vma = to_delete;
+		vma_prev = vma;
+		vma = vma->vma_next;
 	}
-	memset(vma, 0x0, sizeof(struct vma));
-	__inject_vma(vma, &mm->vma_free_list);
+	vma_end = vma;
+	while(vma_end && (vma_end->vma_va + vma_end->vma_len < vma->vma_va + len))
+		vma_end = vma_end->vma_next;
+	if((vma_end->vma_va + vma_end->vma_len) > (vma->vma_va + len) ||
+			(vma_end->vma_va) < (vma->vma_va + len))
+		vma_split(vma_end, vma->vma_va + len);
+	if(vma_prev == vma){
+		// vma is in the beginning of vma_list;
+		mm->mm_vma = vma_end->vma_next;
+	} else {
+		vma_prev->vma_next = vma_end->vma_next;
+	}
+	do{
+		memset(vma, 0x0, sizeof(struct vma));
+		__inject_vma(vma, &mm->vma_free_list);
+		vma = vma->vma_next;
+	}while(vma != vma_end->vma_next);
 }
 
 
