@@ -588,7 +588,7 @@ void env_run(struct env *e)
 }
 
 void __protect_cow(pde_t *pgdir){
-	for(size_t pg_i = 0; pg_i < PDX(UTOP - PGSIZE) + 1; ++pg_i){
+	for(size_t pg_i = 0; pg_i <= PDX(UTOP - PGSIZE) + 1; ++pg_i){
 		for(size_t tb_i = 0; tb_i < NPTENTRIES; ++tb_i){
 			struct page_info *pp;
 			pte_t *pte;
@@ -596,7 +596,7 @@ void __protect_cow(pde_t *pgdir){
 			if(va > (void*)(UTOP - PGSIZE))
 				break; // End of User space
 			pte = pgdir_walk(pgdir, va, 0);
-			if(pte && *pte & PTE_P){
+			if(pte && (*pte & PTE_P)){
 				pp = page_lookup(pgdir, va, NULL);
 				++pp->pp_ref;
 				*pte &= ~PTE_W;
@@ -624,8 +624,11 @@ void __copy_pgdir(pde_t *child, pde_t *parent){
 }
 
 void __copy_vma(struct mm_struct *child, struct mm_struct *parent){
-		memcpy(child->mm_common_vma, parent->mm_common_vma, PGSIZE);
-		child->mm_vma = parent->mm_vma;
+		struct vma *vma = parent->mm_vma;
+		while(vma){
+			do_map(child, vma->vma_file, vma->vma_bin_filesz, vma->vma_bin_va, vma->vma_len, vma->vma_prot, vma->vma_type);
+			vma = vma->vma_next;
+		}
 }
 
 envid_t copy_env(struct env *parent, int flags){
