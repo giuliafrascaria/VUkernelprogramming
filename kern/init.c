@@ -47,10 +47,10 @@ void i386_init(void)
 
     /* Acquire the big kernel lock before waking up APs.
      * LAB 6: Your code here: */
-
+		lock_kernel();
     /* Starting non-boot CPUs */
     boot_aps();
-
+		unlock_kernel();
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
     ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -119,7 +119,7 @@ void mp_main(void)
      *
      * LAB 6: Your code here:
      */
-
+		 sched_yield();
     /* Remove this after you initialize per-CPU trap information */
     for (;;);
 }

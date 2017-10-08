@@ -35,7 +35,7 @@ void sched_yield(void)
      */
 
 		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
-
+		 lock_kernel();
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
 
@@ -56,6 +56,7 @@ void sched_yield(void)
 		 sched_halt();
 		run:
 			env->env_ts = read_tsc();
+			unlock_kernel();
 			env_run(env);
 }
 

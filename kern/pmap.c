@@ -197,7 +197,7 @@ void mem_init(void)
      * We now move to initializing kernel stacks in mem_init_mp().
      * So, we must remove this bootstack initialization from here.
      */
-		 boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
+
     /* Note: Dont map anything between KSTACKTOP - PTSIZE and KSTACKTOP - KTSIZE
      * leaving this as guard region.
      */
@@ -270,7 +270,10 @@ static void mem_init_mp(void)
      *
      * LAB 6: Your code here:
      */
-
+		 for(size_t c = 0; c < NCPU; ++c){
+			 char* stack_i = (char*)(KSTACKTOP - c * (KSTKSIZE + KSTKGAP));
+			 boot_map_region(kern_pgdir, (unsigned int)stack_i - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[c]), PTE_W);
+		 }
 }
 
 /***************************************************************
@@ -309,13 +312,16 @@ void page_init(void)
      *       in-use. */
 
     size_t i;
-		page_free_list = 0;
+		extern char mpentry_end[], mpentry_start[];
 		int in_io_area;
 		int in_kern_area;
+		int in_mp_area;
+		page_free_list = 0;
     for (i = 1; i < npages; ++i) {
 				in_io_area = (i >= PGNUM(IOPHYSMEM) && i < PGNUM(EXTPHYSMEM));
 				in_kern_area = (i >= PGNUM(EXTPHYSMEM) && i < (PGNUM(boot_alloc(0) - KERNBASE)));
-				if(!(in_io_area || in_kern_area)){
+				in_mp_area = (i >= PGNUM(MPENTRY_PADDR) && i < PGNUM(MPENTRY_PADDR + (mpentry_end - mpentry_start)));
+				if(!(in_io_area || in_kern_area || in_mp_area)){
 					pages[i].pp_ref = 0;
 	        pages[i].pp_link = page_free_list;
 	        page_free_list = &pages[i];
