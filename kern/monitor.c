@@ -14,9 +14,11 @@
 #include <kern/kdebug.h>
 #include <kern/trap.h>
 #include <kern/env.h>
+#include <kern/spinlock.h>
 
 #define CMDBUF_SIZE 80  /* enough for one VGA text line */
 
+extern struct spinlock monitor_lock;
 
 struct command {
     const char *name;
@@ -136,7 +138,7 @@ static int runcmd(char *buf, struct trapframe *tf)
 void monitor(struct trapframe *tf)
 {
     char *buf;
-
+		spin_lock(&monitor_lock);
     cprintf("Welcome to the JOS kernel monitor!\n");
     cprintf("Type 'help' for a list of commands.\n");
 
@@ -146,7 +148,10 @@ void monitor(struct trapframe *tf)
     while (1) {
         buf = readline("K> ");
         if (buf != NULL)
-            if (runcmd(buf, tf) < 0)
-                break;
+            if (runcmd(buf, tf) < 0){
+							spin_unlock(&monitor_lock);
+							break;
+						}
+
     }
 }

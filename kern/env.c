@@ -80,7 +80,7 @@ int envid2env(envid_t envid, struct env **env_store, bool checkperm)
 {
     struct env *e;
 		int res = 0;
-		spin_lock(&env_lock);
+		lock_env();
     assert_lock_env();
 
     /* If envid is zero, return the current environment. */
@@ -119,7 +119,7 @@ int envid2env(envid_t envid, struct env **env_store, bool checkperm)
 
     *env_store = e;
 	release:
-		spin_unlock(&env_lock);
+		unlock_env();
     return res;
 }
 
@@ -246,7 +246,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
     int32_t generation;
     int r;
     struct env *e;
-		spin_lock(&env_lock);
+		lock_env();
     if (!(e = env_free_list))
         return -E_NO_FREE_ENV;
 
@@ -295,7 +295,7 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
 
     /* commit the allocation */
     remove_entry_from_list(struct env, e, env_free_list, env_link);
-		spin_unlock(&env_lock);
+		unlock_env();
 		*newenv_store = e;
 		if(vma_init(e) < 0){
 			env_destroy(e);
@@ -444,10 +444,10 @@ void env_create(uint8_t *binary, enum env_type type)
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
 		env->env_status = ENV_RUNNABLE;
-		spin_lock(&env_lock);
+		lock_env();
 		env->env_link = env_run_list;
 		env_run_list = env;
-		spin_unlock(&env_lock);
+		unlock_env();
 		env->env_type = type;
 		load_icode(env, binary);
 }
@@ -460,7 +460,7 @@ void env_free(struct env *e)
     pte_t *pt;
     uint32_t pdeno, pteno;
     physaddr_t pa;
-		spin_lock(&env_lock);
+		lock_env();
     /* If freeing the current environment, switch to kern_pgdir
      * before freeing the page directory, just in case the page
      * gets reused. */
@@ -514,7 +514,7 @@ void env_free(struct env *e)
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
     e->env_link = env_free_list;
     env_free_list = e;
-		spin_unlock(&env_lock);
+		unlock_env();
 }
 
 /*
@@ -524,7 +524,7 @@ void env_free(struct env *e)
  */
 void env_destroy(struct env *e)
 {
-		spin_lock(&env_lock);
+		lock_env();
     assert_lock_env();
     /* If e is currently running on other CPUs, we change its state to
      * ENV_DYING. A zombie environment will be freed the next time
@@ -533,7 +533,7 @@ void env_destroy(struct env *e)
         e->env_status = ENV_DYING;
         return;
     }
-		spin_unlock(&env_lock);
+		unlock_env();
     env_free(e);
 
     if (curenv == e) {
@@ -661,19 +661,15 @@ envid_t copy_env(struct env *parent, int flags){
 
 
 void attach_wait(struct env *cur, struct env *attach_to){
-	spin_lock(&env_lock);
 	cur->env_status = ENV_NOT_RUNNABLE;
 	remove_entry_from_list(struct env, cur, env_run_list, env_link);
 	cur->env_link = attach_to->env_wait_list;
 	attach_to->env_wait_list = cur;
-	spin_unlock(&env_lock);
 }
 
 void dettach_wait(struct env *cur, struct env *dettach_from){
-	spin_lock(&env_lock);
 	remove_entry_from_list(struct env, cur, dettach_from->env_wait_list, env_link);
 	cur->env_link = env_run_list;
 	env_run_list = cur;
 	cur->env_status = ENV_RUNNABLE;
-	spin_unlock(&env_lock);
 }

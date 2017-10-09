@@ -34,10 +34,11 @@ void sched_yield(void)
      *
      * LAB 5: Your code here.
      */
+		 spin_lock(&scheduler_lock);
 		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
-		 spin_lock(&scheduler_lock);
+
 		 while(env){
 			 	if(env == curenv)
 					goto run;
