@@ -248,8 +248,10 @@ void trap(struct trapframe *tf)
         asm volatile("hlt");
 
     /* Re-acqurie the big kernel lock if we were halted in sched_yield(). */
-    if (xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
-        lock_kernel();
+		// DOn't need to lock whole kernel if we are in kernel space
+		xchg(&thiscpu->cpu_status, CPU_STARTED);
+    // if (xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
+    //     lock_kernel();
 
     /* Check that interrupts are disabled.
      * If this assertion fails, DO NOT be tempted to fix it by inserting a "cli"

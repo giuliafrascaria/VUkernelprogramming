@@ -32,6 +32,11 @@ struct spinlock console_lock = {
     .name = "console_lock"
 #endif
 };
+struct spinlock scheduler_lock = {
+#ifdef DEBUG_SPINLOCK
+    .name = "scheduler_lock"
+#endif
+};
 #endif /* USE_BIG_KERNEL_LOCK */
 
 #ifdef DEBUG_SPINLOCK
