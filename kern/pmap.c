@@ -9,6 +9,7 @@
 #include <kern/pmap.h>
 #include <kern/kclock.h>
 #include <kern/env.h>
+#include <kern/spinlock.h>
 
 /* These variables are set by i386_detect_memory() */
 size_t npages;                  /* Amount of physical memory (in pages) */
@@ -19,6 +20,7 @@ pde_t *kern_pgdir;                       /* Kernel's initial page directory */
 struct page_info *pages;                 /* Physical page state array */
 struct page_info *page_free_list; /* Free list of physical pages */
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
+extern struct spinlock pagealloc_lock;
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -81,6 +83,7 @@ static void *boot_alloc(uint32_t n)
 {
 	static char *nextfree;  /* virtual address of next byte of free memory */
 	char *result;
+	lock_pagealloc();
 	if (!nextfree) {
 			extern char end[];
 			nextfree = ROUNDUP((char *) end, PGSIZE);
@@ -88,6 +91,7 @@ static void *boot_alloc(uint32_t n)
 
  result = nextfree;
  nextfree = ROUNDUP((char *)nextfree + n, PGSIZE);
+ unlock_pagealloc();
  return result;
 }
 
@@ -335,6 +339,7 @@ struct page_info *page_alloc(int alloc_flags)
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
 		int _pgsize = alloc_flags & ALLOC_HUGE? HUGE_PGSIZE : PGSIZE;
+		lock_pagealloc();
 		if(alloc_flags & ALLOC_PREMAPPED){
 			result = page_free_list;
 			while(result){
@@ -379,6 +384,7 @@ struct page_info *page_alloc(int alloc_flags)
 			if(alloc_flags & ALLOC_ZERO)
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
+		unlock_pagealloc();
     return result;
 }
 
@@ -389,6 +395,7 @@ struct page_info *page_alloc(int alloc_flags)
 void page_free(struct page_info *pp){
 	if(pp->pp_link != NULL)
 		panic("Invalid/ Double deallocating page");
+	lock_pagealloc();
 	if(pp->pp_flags & ALLOC_HUGE){
 		// HUGE PAGE deallocation
 		for(size_t huge_page_i = 0; huge_page_i < PGNUM(HUGE_PGSIZE); ++huge_page_i)
@@ -397,6 +404,7 @@ void page_free(struct page_info *pp){
 		// NORMAL PAGE deallocation
 		add_page_free_entry(pp);
 	}
+	unlock_pagealloc();
 }
 
 /*
