@@ -93,6 +93,7 @@ void trap_init(void)
 		SETGATE(idt[T_SIMDERR], 0, GD_KT, smid_excpt_intr, 0);
 
 		SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, timer_intr, 0);
+		//SETGATE(idt[IRQ_OFFSET + IRQ_KBD], 0, GD_KT, kebd_intr, 0);
 
 		SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call_intr, 3);
     /* Per-CPU setup */
@@ -218,6 +219,8 @@ static void trap_dispatch(struct trapframe *tf)
 		} else if(tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
 			lapic_eoi();
 			sched_yield();
+		} else if(tf->tf_trapno == IRQ_OFFSET + IRQ_KBD){
+			kbd_intr();
 		} else if( tf->tf_trapno == T_BRKPT){
 			breakpoint_handler(tf);
 			return;
@@ -258,7 +261,7 @@ void trap(struct trapframe *tf)
      * in the interrupt path. */
     assert(!(read_eflags() & FL_IF));
 
-    cprintf("Incoming TRAP frame at %p\n", tf);
+    //cprintf("Incoming TRAP frame at %p\n", tf);
 
     if ((tf->tf_cs & 3) == 3) {
         /* Trapped from user mode. */
@@ -322,11 +325,9 @@ void page_fault_handler(struct trapframe *tf)
 		struct vma *vma;
 		/* Read processor's CR2 register to find the faulting address */
 	  fault_va = rcr2();
-
 		cprintf("[%08x] user fault va %08x ip %08x\n",
 				curenv->env_id, fault_va, tf->tf_eip);
 		print_trapframe(tf);
-
 		if(tf->tf_cs == GD_KT)
 			panic("Kernel space page fault");
 

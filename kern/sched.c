@@ -14,7 +14,6 @@ extern struct spinlock scheduler_lock;
 void sched_yield(void)
 {
     struct env *idle;
-
     /*
      * Implement simple round-robin scheduling.
      *
@@ -34,8 +33,15 @@ void sched_yield(void)
      *
      * LAB 5: Your code here.
      */
-		 spin_lock(&scheduler_lock);
-		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
+			struct env *env;
+	beginning:
+		 //spin_lock(&scheduler_lock);
+		  env = curenv && curenv->env_link? curenv->env_link : env_run_list;
+		 struct env *tmp = env_run_list;
+		//  while(tmp){
+		// 	 cprintf("CURRENT ENV %08x ; status = %d\n", tmp->env_id, tmp->env_status);
+		// 	 tmp = tmp->env_link;
+		//  }
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
 		 while(env){
@@ -52,19 +58,13 @@ void sched_yield(void)
 					env = env_run_list;
 		 }
 		 /* sched_halt never returns */
-		 spin_unlock(&scheduler_lock);
-		 sched_halt();
+		 //spin_unlock(&scheduler_lock);
+		 if(thiscpu->cpu_id == 0)
+		 		sched_halt();
+		 else
+		 		goto beginning;
 		run:
-			spin_unlock(&scheduler_lock);
-
-			struct env *tmp_2 = env_run_list;
-			cprintf("ENV_RUN_LIST\n");
-			while(tmp_2){
-				cprintf("TMP id=%08x ;;; status=%d, next_id=%08x\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE, tmp_2->env_link? tmp_2->env_link->env_id : 0 );
-				cprintf("HERE???\n");
-				tmp_2 = tmp_2->env_link;
-			}
-
+			//spin_unlock(&scheduler_lock);
 			env->env_ts = read_tsc();
 			env_run(env);
 }

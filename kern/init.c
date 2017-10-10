@@ -58,9 +58,9 @@ void i386_init(void)
 		unlock_kernel();
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
-    ENV_CREATE(TEST, ENV_TYPE_USER);
-		int i = 1;
-		i = kern_env_start(kern_env, &i, NULL);
+   ENV_CREATE(TEST, ENV_TYPE_USER);
+		//int i = 1;
+		//i = kern_env_start(kern_env, &i, NULL);
 #else
     /* Touch all you want. */
     ENV_CREATE(user_divzero, ENV_TYPE_USER);

@@ -23,6 +23,7 @@ struct cpuinfo {
     volatile unsigned cpu_status;  /* The status of the CPU */
     struct env *cpu_env;           /* The currently-running environment. */
     struct taskstate cpu_ts;       /* Used by x86 to find stack for interrupt */
+		struct env *cpu_run_list;
 };
 
 /* Initialized in mpconfig.c */

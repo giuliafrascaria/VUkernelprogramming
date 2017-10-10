@@ -43,6 +43,7 @@ extern void machine_check_intr();
 extern void smid_excpt_intr();
 
 extern void timer_intr();
+extern void kebd_intr();
 
 extern void system_call_intr();
 

@@ -50,6 +50,7 @@
  */
 
 TRAPHANDLER_NOEC(timer_intr, IRQ_OFFSET + IRQ_TIMER);
+TRAPHANDLER_NOEC(kebd_intr, IRQ_OFFSET + IRQ_KBD);
 
 TRAPHANDLER_NOEC(devide_zero_intr, 0);
 TRAPHANDLER_NOEC(debug_exception_intr, 1);

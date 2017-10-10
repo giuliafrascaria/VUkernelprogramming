@@ -6,8 +6,10 @@
 #include <inc/env.h>
 #include <kern/cpu.h>
 
+#define env_run_list (thiscpu->cpu_run_list)
+
 extern struct env *envs;            /* All environments */
-extern struct env *env_run_list;            /* All runnable environments */
+
 #define curenv (thiscpu->cpu_env)   /* Current environment */
 extern struct segdesc gdt[];
 

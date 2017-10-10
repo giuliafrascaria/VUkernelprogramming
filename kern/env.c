@@ -17,12 +17,12 @@
 
 struct env *envs = NULL;            /* All environments */
 static struct env *env_free_list;   /* Free environment list */
-struct env *env_run_list;   				/* Free environment list */
                                     /* (linked by env->env_link) */
 
 #define ENVGENSHIFT 12      /* >= LOGNENV */
 
 extern struct spinlock env_lock;
+static int last_cpu = 0;
 
 /*
  * Global descriptor table.
@@ -441,14 +441,16 @@ void env_create(uint8_t *binary, enum env_type type)
 {
     /* LAB 3: Your code here. */
 		struct env *env;
+		struct cpuinfo *cpu = &cpus[last_cpu];
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
 		env->env_status = ENV_RUNNABLE;
 		lock_env();
-		env->env_link = env_run_list;
-		env_run_list = env;
+		env->env_link = cpu->cpu_run_list;
+		cpu->cpu_run_list = env;
 		env->env_type = type;
 		load_icode(env, binary);
+		last_cpu = (last_cpu + 1) % NCPU;
 		unlock_env();
 }
 
@@ -464,7 +466,7 @@ void env_free(struct env *e)
     /* If freeing the current environment, switch to kern_pgdir
      * before freeing the page directory, just in case the page
      * gets reused. */
-    if (e == curenv)
+    if (e == curenv && rcr3() != PADDR(kern_pgdir))
         lcr3(PADDR(kern_pgdir));
 
 		if(e->env_type == ENV_TYPE_KERN)
@@ -517,12 +519,6 @@ void env_free(struct env *e)
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
     e->env_link = env_free_list;
     env_free_list = e;
-		struct env *tmp_2 = env_run_list;
-		cprintf("ENV_RUN_LIST\n");
-		while(tmp_2){
-			cprintf("TMP id=%08x ;;; status=%d\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE);
-			tmp_2 = tmp_2->env_link;
-		}
 		unlock_env();
 }
 
@@ -605,8 +601,6 @@ void env_run(struct env *e)
 		 ++curenv->env_runs;
 		 if(curenv->env_type == ENV_TYPE_USER)
 		 		lcr3(PADDR(curenv->env_pgdir));
-		 else if(curenv->env_type == ENV_TYPE_KERN)
-		 		curenv->env_tf.tf_esp = (unsigned int)percpu_kstacks[thiscpu->cpu_id]; // current cpu stack is set for kernel thread
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -657,7 +651,9 @@ void __copy_vma(struct mm_struct *child, struct mm_struct *parent){
 
 envid_t copy_env(struct env *parent, int flags){
 	// Still don't have flags, but keeping them for future
+	struct cpuinfo *cpu = &cpus[last_cpu];
 	struct env *child;
+	last_cpu = (last_cpu + 1) % NCPU;
 	if(env_alloc(&child, parent->env_id) < 0)
 		return -E_NO_MEM;
 	__protect_cow(parent->env_pgdir);
@@ -665,8 +661,8 @@ envid_t copy_env(struct env *parent, int flags){
 	__copy_vma(&child->env_mm, &parent->env_mm);
 	child->env_tf = parent->env_tf;
 	child->env_tf.tf_regs.reg_eax = 0; // Return value from fork for child process
-	child->env_link = env_run_list;
-	env_run_list = child;
+	child->env_link = cpu->cpu_run_list;
+	cpu->cpu_run_list = child;
 	child->env_status = ENV_RUNNABLE;
 	return child->env_id;
 }
@@ -691,10 +687,11 @@ int kern_env_start(void (*fn)(void *arg), void *arg, struct env **store){
 	int r;
 	struct env *e;
 	extern char kern_env_entry[];
-	lock_env();
+	struct page_info *pp;
 	if (!(e = env_free_list))
 			return -E_NO_FREE_ENV;
 
+	lock_env();
 	/* Generate an env_id for this environment. */
 	generation = (e->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
 	if (generation <= 0)    /* Don't create a negative env_id. */
@@ -730,10 +727,5 @@ int kern_env_start(void (*fn)(void *arg), void *arg, struct env **store){
 	unlock_env();
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 	struct env *tmp_2 = env_run_list;
-	cprintf("ENV_RUN_LIST %08x\n", env_run_list->env_link->env_id);
-	while(tmp_2){
-		cprintf("TMP id=%08x ;;; status=%d\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE);
-		tmp_2 = tmp_2->env_link;
-	}
 	return 0;
 };
