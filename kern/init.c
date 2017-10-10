@@ -51,6 +51,8 @@ void i386_init(void)
     /* Starting non-boot CPUs */
     boot_aps();
 
+		unlock_kernel();
+
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
     ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -121,7 +123,6 @@ void mp_main(void)
      */
 
 		 lock_kernel();
-		 
 		 sched_yield();
     /* Remove this after you initialize per-CPU trap information */
     //for (;;);
