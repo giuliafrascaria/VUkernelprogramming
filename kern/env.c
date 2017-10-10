@@ -447,9 +447,9 @@ void env_create(uint8_t *binary, enum env_type type)
 		lock_env();
 		env->env_link = env_run_list;
 		env_run_list = env;
-		unlock_env();
 		env->env_type = type;
 		load_icode(env, binary);
+		unlock_env();
 }
 
 /*
@@ -467,7 +467,10 @@ void env_free(struct env *e)
     if (e == curenv)
         lcr3(PADDR(kern_pgdir));
 
-    /* Note the environment's demise. */
+		if(e->env_type == ENV_TYPE_KERN)
+			goto common_release;
+
+		/* Note the environment's demise. */
     cprintf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
 
     /* Flush all mapped pages in the user portion of the address space */
@@ -508,12 +511,18 @@ void env_free(struct env *e)
 			dettach_wait(tmp, e);
 			tmp = next;
 		}
-
+	common_release:
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
     e->env_link = env_free_list;
     env_free_list = e;
+		struct env *tmp_2 = env_run_list;
+		cprintf("ENV_RUN_LIST\n");
+		while(tmp_2){
+			cprintf("TMP id=%08x ;;; status=%d\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE);
+			tmp_2 = tmp_2->env_link;
+		}
 		unlock_env();
 }
 
@@ -594,7 +603,10 @@ void env_run(struct env *e)
 		 curenv = e;
 		 curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
-		 lcr3(PADDR(curenv->env_pgdir));
+		 if(curenv->env_type == ENV_TYPE_USER)
+		 		lcr3(PADDR(curenv->env_pgdir));
+		 else if(curenv->env_type == ENV_TYPE_KERN)
+		 		curenv->env_tf.tf_esp = (unsigned int)percpu_kstacks[thiscpu->cpu_id]; // current cpu stack is set for kernel thread
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -673,3 +685,55 @@ void dettach_wait(struct env *cur, struct env *dettach_from){
 	env_run_list = cur;
 	cur->env_status = ENV_RUNNABLE;
 }
+
+int kern_env_start(void (*fn)(void *arg), void *arg, struct env **store){
+	int32_t generation;
+	int r;
+	struct env *e;
+	extern char kern_env_entry[];
+	lock_env();
+	if (!(e = env_free_list))
+			return -E_NO_FREE_ENV;
+
+	/* Generate an env_id for this environment. */
+	generation = (e->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
+	if (generation <= 0)    /* Don't create a negative env_id. */
+			generation = 1 << ENVGENSHIFT;
+	e->env_id = generation | (e - envs);
+
+	/* Set the basic status variables. */
+	e->env_parent_id = 0;
+	e->env_type = ENV_TYPE_KERN;
+	e->env_runs = 0;
+
+	memset(&e->env_tf, 0, sizeof(e->env_tf));
+
+	e->env_tf.tf_ds = GD_KD;
+	e->env_tf.tf_es = GD_KD;
+	e->env_tf.tf_ss = GD_KD;
+	e->env_tf.tf_eip = (unsigned int)kern_env_entry;
+	e->env_tf.tf_regs.reg_eax = (unsigned int)fn;
+	e->env_tf.tf_regs.reg_ebx = (unsigned int)arg;
+	e->env_tf.tf_regs.reg_edx = (unsigned int)e;
+	e->env_tf.tf_cs = GD_KT;
+	e->env_status = ENV_RUNNABLE;
+	/* You will set e->env_tf.tf_eip later. */
+
+	// For now it's forbidden to interrupt kernel threads for scheduling
+	//e->env_tf.tf_eflags = FL_IF;
+	if(store)
+		*store = e;
+	/* commit the allocation */
+	remove_entry_from_list(struct env, e, env_free_list, env_link);
+	e->env_link = env_run_list;
+	env_run_list = e;
+	unlock_env();
+	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+	struct env *tmp_2 = env_run_list;
+	cprintf("ENV_RUN_LIST %08x\n", env_run_list->env_link->env_id);
+	while(tmp_2){
+		cprintf("TMP id=%08x ;;; status=%d\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE);
+		tmp_2 = tmp_2->env_link;
+	}
+	return 0;
+};

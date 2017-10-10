@@ -38,7 +38,6 @@ void sched_yield(void)
 		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
-
 		 while(env){
 			 	if(env == curenv)
 					goto run;
@@ -57,6 +56,15 @@ void sched_yield(void)
 		 sched_halt();
 		run:
 			spin_unlock(&scheduler_lock);
+
+			struct env *tmp_2 = env_run_list;
+			cprintf("ENV_RUN_LIST\n");
+			while(tmp_2){
+				cprintf("TMP id=%08x ;;; status=%d, next_id=%08x\n",tmp_2->env_id, tmp_2->env_status == ENV_RUNNABLE, tmp_2->env_link? tmp_2->env_link->env_id : 0 );
+				cprintf("HERE???\n");
+				tmp_2 = tmp_2->env_link;
+			}
+
 			env->env_ts = read_tsc();
 			env_run(env);
 }

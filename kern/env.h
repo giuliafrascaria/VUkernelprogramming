@@ -27,6 +27,8 @@ void env_pop_tf(struct trapframe *tf) __attribute__((noreturn));
 void attach_wait(struct env*, struct env*);
 void dettach_wait(struct env*, struct env*);
 
+int kern_env_start(void (*fn)(void *arg), void *arg, struct env **store);
+
 /* Without this extra macro, we couldn't pass macros like TEST to ENV_CREATE
  * because of the C pre-processor's argument prescan rule. */
 #define ENV_PASTE3(x, y, z) x ## y ## z

@@ -18,6 +18,11 @@
 static void boot_aps(void);
 
 
+void kern_env(void *arg){
+	for( int j = 0; j < 10; ++j)
+		cprintf("\n\n\nKERN_ENV with param %d ite=%d\n\n\n", *((int*)arg) , j);
+}
+
 void i386_init(void)
 {
     extern char edata[], end[];
@@ -54,6 +59,8 @@ void i386_init(void)
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
     ENV_CREATE(TEST, ENV_TYPE_USER);
+		int i = 1;
+		i = kern_env_start(kern_env, &i, NULL);
 #else
     /* Touch all you want. */
     ENV_CREATE(user_divzero, ENV_TYPE_USER);

@@ -45,6 +45,7 @@ enum {
 /* Special environment types */
 enum env_type {
     ENV_TYPE_USER = 0,
+		ENV_TYPE_KERN = 1,
 };
 
 struct env {
