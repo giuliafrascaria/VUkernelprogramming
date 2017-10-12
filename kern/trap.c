@@ -16,8 +16,6 @@
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
 
-static struct taskstate ts;
-
 /*
  * For debugging, so print_trapframe can distinguish between printing a saved
  * trapframe and printing the current trapframe and print some additional
@@ -128,17 +126,17 @@ void trap_init_percpu(void)
      */
 
     /* Setup a TSS so that we get the right stack when we trap to the kernel. */
-    ts.ts_esp0 = KSTACKTOP;
-    ts.ts_ss0 = GD_KD;
+    thiscpu->cpu_ts.ts_esp0 = (unsigned int)percpu_kstacks[thiscpu->cpu_id];
+    thiscpu->cpu_ts.ts_ss0 = GD_KD;
 
     /* Initialize the TSS slot of the gdt. */
-    gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
+    gdt[(GD_TSS0 >> 3) + thiscpu->cpu_id] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
                     sizeof(struct taskstate), 0);
-    gdt[GD_TSS0 >> 3].sd_s = 0;
+    gdt[(GD_TSS0 >> 3) + thiscpu->cpu_id].sd_s = 0;
 
     /* Load the TSS selector (like other segment selectors, the bottom three
      * bits are special; we leave them 0). */
-    ltr(GD_TSS0);
+    ltr(GD_TSS0 + thiscpu->cpu_id * 8);
 
     /* Load the IDT. */
     lidt(&idt_pd);
@@ -240,7 +238,7 @@ static void trap_dispatch(struct trapframe *tf)
 
 void trap(struct trapframe *tf)
 {
-    /* The environment may have set DF and some versions of GCC rely on DF being
+		/* The environment may have set DF and some versions of GCC rely on DF being
      * clear. */
     asm volatile("cld" ::: "cc");
 
@@ -249,22 +247,23 @@ void trap(struct trapframe *tf)
     if (panicstr)
         asm volatile("hlt");
 
-    /* Re-acqurie the big kernel lock if we were halted in sched_yield(). */
-    if (xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
-        lock_kernel();
+    // /* Re-acqurie the big kernel lock if we were halted in sched_yield(). */
+    // if(xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
+		// 	lock_kernel();
 
     /* Check that interrupts are disabled.
      * If this assertion fails, DO NOT be tempted to fix it by inserting a "cli"
      * in the interrupt path. */
     assert(!(read_eflags() & FL_IF));
 
-    cprintf("Incoming TRAP frame at %p\n", tf);
+   // cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, thiscpu->cpu_id);
+
+		lock_kernel();
 
     if ((tf->tf_cs & 3) == 3) {
         /* Trapped from user mode. */
         /* Acquire the big kernel lock before doing any serious kernel work.
          * LAB 6: Your code here. */
-
         assert(curenv);
 
         /* Garbage collect if current enviroment is a zombie. */
@@ -288,13 +287,12 @@ void trap(struct trapframe *tf)
 
     /* Dispatch based on what type of trap occurred */
     trap_dispatch(tf);
-
     /* If we made it to this point, then no other environment was scheduled, so
      * we should return to the current environment if doing so makes sense. */
     if (curenv && curenv->env_status == ENV_RUNNING)
-        env_run(curenv);
+			 env_run(curenv);
     else
-        sched_yield();
+			 sched_yield();
 }
 
 void breakpoint_handler(struct trapframe *tf){

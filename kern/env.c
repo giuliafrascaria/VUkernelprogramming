@@ -18,6 +18,7 @@
 struct env *envs = NULL;            /* All environments */
 static struct env *env_free_list;   /* Free environment list */
 struct env *env_run_list;   				/* Free environment list */
+size_t runnable_envs;
                                     /* (linked by env->env_link) */
 
 #define ENVGENSHIFT 12      /* >= LOGNENV */
@@ -127,6 +128,7 @@ void env_init(void)
     /* Set up envs array. */
     /* LAB 3: Your code here. */
 		env_free_list = 0;
+		runnable_envs = 0;
 		for(ssize_t env_i = NENV - 1; env_i >= 0; --env_i){
 			envs[env_i].env_link = env_free_list;
 			envs[env_i].env_id = 0;
@@ -434,11 +436,12 @@ void env_create(uint8_t *binary, enum env_type type)
 		struct env *env;
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
+		load_icode(env, binary);
 		env->env_status = ENV_RUNNABLE;
 		env->env_link = env_run_list;
 		env_run_list = env;
+		++runnable_envs;
 		env->env_type = type;
-		load_icode(env, binary);
 }
 
 /*
@@ -501,6 +504,7 @@ void env_free(struct env *e)
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
+		--runnable_envs;
     e->env_link = env_free_list;
     env_free_list = e;
 }
@@ -582,6 +586,7 @@ void env_run(struct env *e)
 		 curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
 		 lcr3(PADDR(curenv->env_pgdir));
+		 unlock_kernel();
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -643,6 +648,8 @@ envid_t copy_env(struct env *parent, int flags){
 	child->env_link = env_run_list;
 	env_run_list = child;
 	child->env_status = ENV_RUNNABLE;
+	++runnable_envs;
+	//lapic_ipi(IRQ_OFFSET + IRQ_TIMER);
 	return child->env_id;
 }
 
