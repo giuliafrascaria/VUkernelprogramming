@@ -10,6 +10,7 @@ extern struct env *envs;            /* All environments */
 extern struct env *env_run_list;            /* All runnable environments */
 #define curenv (thiscpu->cpu_env)   /* Current environment */
 extern struct segdesc gdt[];
+extern size_t runnable_envs;
 
 void env_init(void);
 void env_init_percpu(void);

@@ -12,8 +12,8 @@ void sched_halt(void);
  */
 void sched_yield(void)
 {
-    struct env *idle;
-
+    struct env *env;
+		size_t cur_cycle = 1;
     /*
      * Implement simple round-robin scheduling.
      *
@@ -33,13 +33,14 @@ void sched_yield(void)
      *
      * LAB 5: Your code here.
      */
-
-		 struct env *env = curenv && curenv->env_link? curenv->env_link : env_run_list;
+		 env = curenv && curenv->env_link? curenv->env_link : env_run_list;
 
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
 
 		 while(env){
+			  if(runnable_envs < cur_cycle++)
+					sched_halt();
 			 	if(env == curenv)
 					goto run;
 				//  As far as env - is located in env_run list it can has either ENV_RUNNING or ENV_RUNNABLE status
@@ -66,7 +67,6 @@ void sched_yield(void)
 void sched_halt(void)
 {
     int i;
-
     /* For debugging and testing purposes, if there are no runnable
      * environments in the system, then drop into the kernel monitor. */
     for (i = 0; i < NENV; i++) {
@@ -75,7 +75,11 @@ void sched_halt(void)
              envs[i].env_status == ENV_DYING))
             break;
     }
-    if (i == NENV) {
+
+		/* Release the big kernel lock as if we were "leaving" the kernel */
+		unlock_kernel();
+
+		if (i == NENV) {
         cprintf("No runnable environments in the system!\n");
         while (1)
             monitor(NULL);
@@ -89,9 +93,6 @@ void sched_halt(void)
      * timer interupts come in, we know we should re-acquire the
      * big kernel lock */
     xchg(&thiscpu->cpu_status, CPU_HALTED);
-
-    /* Release the big kernel lock as if we were "leaving" the kernel */
-    unlock_kernel();
 
     /* Reset stack pointer, enable interrupts and then halt. */
     asm volatile (
