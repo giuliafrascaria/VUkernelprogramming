@@ -6,7 +6,7 @@
 #include <kern/monitor.h>
 
 void sched_halt(void);
-
+extern struct spinlock scheduler_lock;
 /*
  * Choose a user environment to run and run it.
  */
@@ -39,6 +39,7 @@ void sched_yield(void)
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
 
+       spin_lock(&scheduler_lock);
 		 while(env){
 			 	if(env == curenv)
 					goto run;
@@ -53,8 +54,10 @@ void sched_yield(void)
 					env = env_run_list;
 		 }
 		 /* sched_halt never returns */
+     spin_unlock(&scheduler_lock);
 		 sched_halt();
 		run:
+      spin_unlock(&scheduler_lock);
 			env->env_ts = read_tsc();
 			env_run(env);
 }
