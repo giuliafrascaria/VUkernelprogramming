@@ -12,7 +12,7 @@
  * LAB 6: Comment out the following macro definition
  *        when you are ready to move to fine-grained locking.
  */
-#define USE_BIG_KERNEL_LOCK 1
+//#define USE_BIG_KERNEL_LOCK 1
 
 /* Mutual exclusion lock. */
 struct spinlock {
@@ -69,6 +69,8 @@ static inline void assert_lock_env(void) { }
 extern struct spinlock pagealloc_lock;
 extern struct spinlock env_lock;
 extern struct spinlock console_lock;
+extern struct spinlock monitor_lock;
+extern struct spinlock sched_lock;
 
 static inline void lock_pagealloc(void) { spin_lock(&pagealloc_lock); }
 static inline void unlock_pagealloc(void) { spin_unlock(&pagealloc_lock); asm volatile("pause"); }

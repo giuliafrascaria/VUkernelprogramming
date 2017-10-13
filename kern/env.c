@@ -78,13 +78,14 @@ struct pseudodesc gdt_pd = {
 int envid2env(envid_t envid, struct env **env_store, bool checkperm)
 {
     struct env *e;
-
+		int res = 0;
+		lock_env();
     assert_lock_env();
 
     /* If envid is zero, return the current environment. */
     if (envid == 0) {
         *env_store = curenv;
-        return 0;
+        goto release;
     }
 
     /*
@@ -97,7 +98,8 @@ int envid2env(envid_t envid, struct env **env_store, bool checkperm)
     e = &envs[ENVX(envid)];
     if (e->env_status == ENV_FREE || e->env_id != envid) {
         *env_store = 0;
-        return -E_BAD_ENV;
+        res = -E_BAD_ENV;
+				goto release;
     }
 
     /*
@@ -109,11 +111,13 @@ int envid2env(envid_t envid, struct env **env_store, bool checkperm)
      */
     if (checkperm && e != curenv && e->env_parent_id != curenv->env_id) {
         *env_store = 0;
-        return -E_BAD_ENV;
+        res = -E_BAD_ENV;
     }
 
     *env_store = e;
-    return 0;
+   release:
+	 	unlock_env();
+		return 0;
 }
 
 /*
@@ -238,15 +242,18 @@ int vma_init(struct env *e){
 int env_alloc(struct env **newenv_store, envid_t parent_id)
 {
     int32_t generation;
-    int r;
+    int r = 0;
     struct env *e;
+		lock_env();
+    if (!(e = env_free_list)){
+			r = -E_NO_FREE_ENV;
+			goto release;
+		}
 
-    if (!(e = env_free_list))
-        return -E_NO_FREE_ENV;
 
     /* Allocate and set up the page directory for this environment. */
     if ((r = env_setup_vm(e)) < 0)
-        return r;
+        goto release;
 
     /* Generate an env_id for this environment. */
     generation = (e->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
@@ -293,10 +300,13 @@ int env_alloc(struct env **newenv_store, envid_t parent_id)
 		*newenv_store = e;
 		if(vma_init(e) < 0){
 			env_destroy(e);
-			return -E_NO_MEM;
+			r = -E_NO_MEM;
+			goto release;
 		}
     cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
-    return 0;
+		release:
+		unlock_env();
+    return r;
 }
 
 /*
@@ -437,11 +447,13 @@ void env_create(uint8_t *binary, enum env_type type)
 		struct env *env;
 		if(env_alloc(&env, 0) < 0)
 			panic("Cannot create first user-mode environment");
+		lock_env();
 		load_icode(env, binary);
 		env->env_status = ENV_RUNNABLE;
 		env->env_link = env_run_list;
 		env_run_list = env;
 		++runnable_envs;
+		unlock_env();
 		env->env_type = type;
 }
 
@@ -453,7 +465,8 @@ void env_free(struct env *e)
     pte_t *pt;
     uint32_t pdeno, pteno;
     physaddr_t pa;
-
+		lock_env();
+		assert_lock_env();
     /* If freeing the current environment, switch to kern_pgdir
      * before freeing the page directory, just in case the page
      * gets reused. */
@@ -508,6 +521,7 @@ void env_free(struct env *e)
 		--runnable_envs;
     e->env_link = env_free_list;
     env_free_list = e;
+		unlock_env();
 }
 
 /*
@@ -517,7 +531,7 @@ void env_free(struct env *e)
  */
 void env_destroy(struct env *e)
 {
-    assert_lock_env();
+		lock_env();
     /* If e is currently running on other CPUs, we change its state to
      * ENV_DYING. A zombie environment will be freed the next time
      * it traps to the kernel. */
@@ -525,7 +539,7 @@ void env_destroy(struct env *e)
         e->env_status = ENV_DYING;
         return;
     }
-
+		unlock_env();
     env_free(e);
 
     if (curenv == e) {
@@ -581,13 +595,15 @@ void env_run(struct env *e)
      *  and make sure you have set the relevant parts of
      *  e->env_tf to sensible values.
      */
+		 lock_env();
 		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
-		 curenv->env_status = ENV_RUNNING;
+		 if(curenv->env_status != ENV_DYING)
+		 	curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
+		 unlock_env();
 		 lcr3(PADDR(curenv->env_pgdir));
-		 unlock_kernel();
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -641,6 +657,7 @@ envid_t copy_env(struct env *parent, int flags){
 	struct env *child;
 	if(env_alloc(&child, parent->env_id) < 0)
 		return -E_NO_MEM;
+	lock_env();
 	__protect_cow(parent->env_pgdir);
 	__copy_pgdir(child->env_pgdir, parent->env_pgdir);
 	__copy_vma(&child->env_mm, &parent->env_mm);
@@ -650,16 +667,19 @@ envid_t copy_env(struct env *parent, int flags){
 	env_run_list = child;
 	child->env_status = ENV_RUNNABLE;
 	++runnable_envs;
+	unlock_env();
 	//lapic_ipi(IRQ_OFFSET + IRQ_TIMER);
 	return child->env_id;
 }
 
 
 void attach_wait(struct env *cur, struct env *attach_to){
+	lock_env();
 	cur->env_status = ENV_NOT_RUNNABLE;
 	remove_entry_from_list(struct env, cur, env_run_list, env_link);
 	cur->env_link = attach_to->env_wait_list;
 	attach_to->env_wait_list = cur;
+	unlock_env();
 }
 
 void dettach_wait(struct env *cur, struct env *dettach_from){
