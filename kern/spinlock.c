@@ -17,6 +17,16 @@ struct spinlock kernel_lock = {
 #endif
 };
 #else
+struct spinlock sched_lock = {
+#ifdef DEBUG_SPINLOCK
+    .name = "sched_lock"
+#endif
+};
+struct spinlock monitor_lock = {
+#ifdef DEBUG_SPINLOCK
+    .name = "monitor_lock"
+#endif
+};
 struct spinlock pagealloc_lock = {
 #ifdef DEBUG_SPINLOCK
     .name = "pagealloc_lock"

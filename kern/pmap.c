@@ -9,6 +9,7 @@
 #include <kern/pmap.h>
 #include <kern/kclock.h>
 #include <kern/env.h>
+#include <kern/spinlock.h>
 
 /* These variables are set by i386_detect_memory() */
 size_t npages;                  /* Amount of physical memory (in pages) */
@@ -333,6 +334,7 @@ struct page_info *page_alloc(int alloc_flags)
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
 		int _pgsize = alloc_flags & ALLOC_HUGE? HUGE_PGSIZE : PGSIZE;
+		lock_pagealloc();
 		if(alloc_flags & ALLOC_PREMAPPED){
 			result = page_free_list;
 			while(result){
@@ -377,6 +379,7 @@ struct page_info *page_alloc(int alloc_flags)
 			if(alloc_flags & ALLOC_ZERO)
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
+		unlock_pagealloc();
     return result;
 }
 
@@ -385,6 +388,7 @@ struct page_info *page_alloc(int alloc_flags)
  * (This function should only be called when pp->pp_ref reaches 0.)
  */
 void page_free(struct page_info *pp){
+	lock_pagealloc();
 	if(pp->pp_link != NULL)
 		panic("Invalid/ Double deallocating page");
 	if(pp->pp_flags & ALLOC_HUGE){
@@ -395,6 +399,7 @@ void page_free(struct page_info *pp){
 		// NORMAL PAGE deallocation
 		add_page_free_entry(pp);
 	}
+	unlock_pagealloc();
 }
 
 /*

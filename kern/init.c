@@ -50,9 +50,6 @@ void i386_init(void)
 
     /* Acquire the big kernel lock before waking up APs.
      * LAB 6: Your code here: */
-		lock_kernel();
-    /* Starting non-boot CPUs */
-    boot_aps();
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
@@ -62,7 +59,8 @@ void i386_init(void)
     ENV_CREATE(user_divzero, ENV_TYPE_USER);
 #endif
     /* Schedule and run the first user environment! */
-		lapic_ipi(IRQ_OFFSET + IRQ_TIMER);
+		/* Starting non-boot CPUs */
+    boot_aps();
     sched_yield();
 }
 

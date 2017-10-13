@@ -14,6 +14,7 @@
 #include <kern/kdebug.h>
 #include <kern/trap.h>
 #include <kern/env.h>
+#include <kern/spinlock.h>
 
 #define CMDBUF_SIZE 80  /* enough for one VGA text line */
 
@@ -136,7 +137,7 @@ static int runcmd(char *buf, struct trapframe *tf)
 void monitor(struct trapframe *tf)
 {
     char *buf;
-
+		spin_lock(&monitor_lock);
     cprintf("Welcome to the JOS kernel monitor!\n");
     cprintf("Type 'help' for a list of commands.\n");
 
@@ -149,4 +150,5 @@ void monitor(struct trapframe *tf)
             if (runcmd(buf, tf) < 0)
                 break;
     }
+		spin_unlock(&monitor_lock);
 }

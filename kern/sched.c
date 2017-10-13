@@ -6,7 +6,7 @@
 #include <kern/monitor.h>
 
 void sched_halt(void);
-
+extern struct spinlock sched_lock;
 /*
  * Choose a user environment to run and run it.
  */
@@ -14,6 +14,8 @@ void sched_yield(void)
 {
     struct env *env;
 		size_t cur_cycle = 1;
+		spin_lock(&sched_lock);
+		lock_env();
     /*
      * Implement simple round-robin scheduling.
      *
@@ -39,13 +41,13 @@ void sched_yield(void)
 			 env = curenv; // Continue doing current env
 
 		 while(env){
-			  if(runnable_envs < cur_cycle++)
-					sched_halt();
 			 	if(env == curenv)
 					goto run;
+				if(runnable_envs < cur_cycle++)
+					goto halt;
 				//  As far as env - is located in env_run list it can has either ENV_RUNNING or ENV_RUNNABLE status
 				int status = xchg(&env->env_status, ENV_RUNNING);
-			 	if( status == ENV_RUNNABLE)
+			 	if( status == ENV_RUNNABLE || status == ENV_DYING)
 					goto run;
 
 				if(env->env_link)
@@ -54,9 +56,14 @@ void sched_yield(void)
 					env = env_run_list;
 		 }
 		 /* sched_halt never returns */
-		 sched_halt();
+		halt:
+			unlock_env();
+			spin_unlock(&sched_lock);
+		 	sched_halt();
 		run:
 			env->env_ts = read_tsc();
+			unlock_env();
+			spin_unlock(&sched_lock);
 			env_run(env);
 }
 
@@ -77,14 +84,11 @@ void sched_halt(void)
     }
 
 		/* Release the big kernel lock as if we were "leaving" the kernel */
-		unlock_kernel();
-
 		if (i == NENV) {
         cprintf("No runnable environments in the system!\n");
         while (1)
             monitor(NULL);
     }
-
     /* Mark that no environment is running on this CPU */
     curenv = NULL;
     lcr3(PADDR(kern_pgdir));
