@@ -25,6 +25,7 @@ KERN_SRCFILES :=	kern/entry.S \
 			kern/printf.c \
 			kern/trap.c \
 			kern/trapentry.S \
+			kern/kthread_entry.S \
 			kern/sched.c \
 			kern/syscall.c \
 			kern/mm.c \

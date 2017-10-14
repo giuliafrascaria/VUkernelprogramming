@@ -47,8 +47,10 @@ void sched_yield(void)
 					goto halt;
 				//  As far as env - is located in env_run list it can has either ENV_RUNNING or ENV_RUNNABLE status
 				int status = xchg(&env->env_status, ENV_RUNNING);
-			 	if( status == ENV_RUNNABLE || status == ENV_DYING)
+			 	if( status == ENV_RUNNABLE || status == ENV_DYING){
+					env->env_ts = read_tsc();
 					goto run;
+				}
 
 				if(env->env_link)
 					env = env->env_link;
@@ -61,7 +63,6 @@ void sched_yield(void)
 			spin_unlock(&sched_lock);
 		 	sched_halt();
 		run:
-			env->env_ts = read_tsc();
 			unlock_env();
 			spin_unlock(&sched_lock);
 			env_run(env);
@@ -82,7 +83,6 @@ void sched_halt(void)
              envs[i].env_status == ENV_DYING))
             break;
     }
-
 		/* Release the big kernel lock as if we were "leaving" the kernel */
 		if (i == NENV) {
         cprintf("No runnable environments in the system!\n");
