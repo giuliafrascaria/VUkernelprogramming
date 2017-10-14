@@ -126,7 +126,7 @@ void trap_init_percpu(void)
      */
 
     /* Setup a TSS so that we get the right stack when we trap to the kernel. */
-    thiscpu->cpu_ts.ts_esp0 = (unsigned int)percpu_kstacks[thiscpu->cpu_id];
+    thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (KSTKSIZE + KSTKGAP) * thiscpu->cpu_id;
     thiscpu->cpu_ts.ts_ss0 = GD_KD;
 
     /* Initialize the TSS slot of the gdt. */
@@ -258,7 +258,6 @@ void trap(struct trapframe *tf)
 
     cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, cpunum());
 
-
     if ((tf->tf_cs & 3) == 3) {
         /* Trapped from user mode. */
         /* Acquire the big kernel lock before doing any serious kernel work.
@@ -278,7 +277,15 @@ void trap(struct trapframe *tf)
         curenv->env_tf = *tf;
         /* The trapframe on the stack should be ignored from here on. */
         tf = &curenv->env_tf;
-    }
+
+    } else if(curenv && curenv->env_type == ENV_TYPE_KERNEL){
+			// Trapped from kernel thread
+			curenv->env_tf = *tf;
+			curenv->env_tf.tf_esp = read_esp() + 16; // 4 * 4bytes values are on current stack
+			curenv->env_tf.tf_ss = GD_KD;
+			tf = &curenv->env_tf;
+			__asm __volatile("movl %0, %%esp" : : "g" (thiscpu->cpu_ts.ts_esp0));
+		}
 
     /* Record that tf is the last real trapframe so print_trapframe can print
      * some additional information. */

@@ -475,44 +475,45 @@ void env_free(struct env *e)
 
     /* Note the environment's demise. */
     cprintf("[%08x] free env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+		if(e->env_type == ENV_TYPE_USER){
+			/* Flush all mapped pages in the user portion of the address space */
+	    static_assert(UTOP % PTSIZE == 0);
+	    for (pdeno = 0; pdeno < PDX(UTOP); pdeno++) {
 
-    /* Flush all mapped pages in the user portion of the address space */
-    static_assert(UTOP % PTSIZE == 0);
-    for (pdeno = 0; pdeno < PDX(UTOP); pdeno++) {
+	        /* Only look at mapped page tables */
+	        if (!(e->env_pgdir[pdeno] & PTE_P))
+	            continue;
 
-        /* Only look at mapped page tables */
-        if (!(e->env_pgdir[pdeno] & PTE_P))
-            continue;
+	        /* Find the pa and va of the page table */
+	        pa = PTE_ADDR(e->env_pgdir[pdeno]);
+	        pt = (pte_t*) KADDR(pa);
 
-        /* Find the pa and va of the page table */
-        pa = PTE_ADDR(e->env_pgdir[pdeno]);
-        pt = (pte_t*) KADDR(pa);
+	        /* Unmap all PTEs in this page table */
+	        for (pteno = 0; pteno <= PTX(~0); pteno++) {
+	            if (pt[pteno] & PTE_P)
+	                page_remove(e->env_pgdir, PGADDR(pdeno, pteno, 0));
+	        }
 
-        /* Unmap all PTEs in this page table */
-        for (pteno = 0; pteno <= PTX(~0); pteno++) {
-            if (pt[pteno] & PTE_P)
-                page_remove(e->env_pgdir, PGADDR(pdeno, pteno, 0));
-        }
+	        /* Free the page table itself */
+	        e->env_pgdir[pdeno] = 0;
+	        page_decref(pa2page(pa));
+	    }
 
-        /* Free the page table itself */
-        e->env_pgdir[pdeno] = 0;
-        page_decref(pa2page(pa));
-    }
-
-    /* Free the page directory */
-    pa = PADDR(e->env_pgdir);
-    e->env_pgdir = 0;
-    page_decref(pa2page(pa));
-    /* Free VMA list. */
-    pa = PADDR(e->env_mm.mm_common_vma);
-    e->env_mm.mm_common_vma = 0;
-    page_decref(pa2page(pa));
-		/* Free all waiting envs */
-		struct env *tmp = e->env_wait_list;
-		while(tmp){
-			struct env *next = tmp->env_link;
-			dettach_wait(tmp, e);
-			tmp = next;
+	    /* Free the page directory */
+	    pa = PADDR(e->env_pgdir);
+	    e->env_pgdir = 0;
+	    page_decref(pa2page(pa));
+	    /* Free VMA list. */
+	    pa = PADDR(e->env_mm.mm_common_vma);
+	    e->env_mm.mm_common_vma = 0;
+	    page_decref(pa2page(pa));
+			/* Free all waiting envs */
+			struct env *tmp = e->env_wait_list;
+			while(tmp){
+				struct env *next = tmp->env_link;
+				dettach_wait(tmp, e);
+				tmp = next;
+			}
 		}
 
     /* return the environment to the free list */
@@ -537,6 +538,7 @@ void env_destroy(struct env *e)
      * it traps to the kernel. */
     if (e->env_status == ENV_RUNNING && curenv != e) {
         e->env_status = ENV_DYING;
+				unlock_env();
         return;
     }
 		unlock_env();
@@ -556,16 +558,35 @@ void env_destroy(struct env *e)
  */
 void env_pop_tf(struct trapframe *tf)
 {
+		char *str = "WTFFF????\n";
     /* Record the CPU we are running on for user-space debugging */
     curenv->env_cpunum = cpunum();
-
-    __asm __volatile("movl %0,%%esp\n"
-        "\tpopal\n"
-        "\tpopl %%es\n"
-        "\tpopl %%ds\n"
-        "\taddl $0x8,%%esp\n" /* skip tf_trapno and tf_errcode */
-        "\tiret"
-        : : "g" (tf) : "memory");
+		if(curenv->env_type == ENV_TYPE_KERNEL){
+			__asm __volatile("movl %0,%%esp\n"
+					"\tpopal\n"
+					"\tpopl %%es\n"
+					"\tpopl %%ds\n"
+					"\tpushl %%eax\n"
+					"\taddl $12, %%esp\n" // ERR
+					"\tmovl 12(%%esp), %%eax\n" // ESP -> EAX
+					"\tpopl -12(%%eax) \n" //EIP
+					"\tpopl -8(%%eax) \n" // CS
+					"\tpopl -4(%%eax) \n" // EFLAGS
+					"\tmovl -24(%%esp), %%eax \n" // RECOVERING EAX
+					"popl %%esp\n" /* skip tf_trapno and tf_errcode */
+					"subl $12,%%esp\n" /* skip tf_trapno and tf_errcode */
+					"\tiret"
+					: : "m" (tf): "memory");
+		}
+		else{
+			__asm __volatile("movl %0,%%esp\n"
+	        "\tpopal\n"
+	        "\tpopl %%es\n"
+	        "\tpopl %%ds\n"
+	        "\taddl $0x8,%%esp\n" /* skip tf_trapno and tf_errcode */
+	        "\tiret"
+	        : : "g" (tf) : "memory");
+		}
     panic("iret failed");  /* mostly to placate the compiler */
 }
 
@@ -603,7 +624,8 @@ void env_run(struct env *e)
 		 	curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
 		 unlock_env();
-		 lcr3(PADDR(curenv->env_pgdir));
+		 if(curenv->env_type == ENV_TYPE_USER)
+		 	lcr3(PADDR(curenv->env_pgdir));
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -687,4 +709,60 @@ void dettach_wait(struct env *cur, struct env *dettach_from){
 	cur->env_link = env_run_list;
 	env_run_list = cur;
 	cur->env_status = ENV_RUNNABLE;
+}
+
+void kern_thread_start(void (*fn)(void *arg), void* arg){
+	struct page_info *pp;
+	struct env *kern_thread;
+	extern char kern_thread_entry[];
+	int32_t generation;
+
+	pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
+	if(!pp)
+		return;
+	++pp->pp_ref;
+
+	lock_env();
+	if (!(kern_thread = env_free_list)){
+		goto release;
+	}
+
+	/* Generate an env_id for this environment. */
+	generation = (kern_thread->env_id + (1 << ENVGENSHIFT)) & ~(NENV - 1);
+	if (generation <= 0)    /* Don't create a negative env_id. */
+			generation = 1 << ENVGENSHIFT;
+	kern_thread->env_id = generation | (kern_thread - envs);
+
+	/* Set the basic status variables. */
+	kern_thread->env_parent_id = 0;
+	kern_thread->env_runs = 0;
+
+	/*
+	 * Clear out all the saved register state, to prevent the register values of
+	 * a prior environment inhabiting this env structure from "leaking" into our
+	 * new environment.
+	 */
+	memset(&kern_thread->env_tf, 0, sizeof(kern_thread->env_tf));
+
+	/* commit the allocation */
+	remove_entry_from_list(struct env, kern_thread, env_free_list, env_link);
+
+	kern_thread->env_tf.tf_ds = GD_KD;
+	kern_thread->env_tf.tf_es = GD_KD;
+	kern_thread->env_tf.tf_ss = GD_KD;
+	kern_thread->env_tf.tf_eflags = 0x0;
+	kern_thread->env_tf.tf_esp = (unsigned int)ROUNDUP(page2kva(pp), PGSIZE);
+	kern_thread->env_tf.tf_eip = (unsigned int)kern_thread_entry;
+	kern_thread->env_tf.tf_regs.reg_eax = (unsigned int)fn;
+	kern_thread->env_tf.tf_regs.reg_ebx = (unsigned int)arg;
+	kern_thread->env_tf.tf_regs.reg_edx = (unsigned int)kern_thread;
+	kern_thread->env_tf.tf_cs = GD_KT;
+	kern_thread->env_type = ENV_TYPE_KERNEL;
+	kern_thread->env_status = ENV_RUNNABLE;
+	kern_thread->env_link = env_run_list;
+	++runnable_envs;
+	env_run_list = kern_thread;
+release:
+	unlock_env();
+
 }
