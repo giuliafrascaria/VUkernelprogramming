@@ -18,8 +18,4 @@ kern_thread_entry:
 	pushl %ebx;
 	call *%eax;
 	addl $0x4, %esp // curenv on top of stack again
-	popl %edx
-	call _this_cpu_stack
-	movl %eax, %esp
-	pushl %edx
 	call env_destroy;
