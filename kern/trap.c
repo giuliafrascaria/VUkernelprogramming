@@ -211,12 +211,12 @@ static void trap_dispatch(struct trapframe *tf)
      */
 
     /* Unexpected trap: The user process or the kernel has a bug. */
-
 		if(tf->tf_trapno == T_PGFLT){
 			page_fault_handler(tf);
 			return;
 		} else if(tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
-			lapic_eoi();
+			if(tf->tf_cs == GD_UT)
+				lapic_eoi();
 			sched_yield();
 		} else if( tf->tf_trapno == T_BRKPT){
 			breakpoint_handler(tf);
@@ -248,7 +248,6 @@ void trap(struct trapframe *tf)
         asm volatile("hlt");
 
     // /* Re-acqurie the big kernel lock if we were halted in sched_yield(). */
-		xchg(&thiscpu->cpu_status, CPU_STARTED);
      if(xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
 			sched_yield();
     /* Check that interrupts are disabled.
@@ -258,7 +257,7 @@ void trap(struct trapframe *tf)
 
     cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, cpunum());
 
-    if ((tf->tf_cs & 3) == 3) {
+    if ((tf->tf_cs & 3) == 3 || (curenv->env_type == ENV_TYPE_KERNEL)) {
         /* Trapped from user mode. */
         /* Acquire the big kernel lock before doing any serious kernel work.
          * LAB 6: Your code here. */
@@ -278,14 +277,7 @@ void trap(struct trapframe *tf)
         /* The trapframe on the stack should be ignored from here on. */
         tf = &curenv->env_tf;
 
-    } else if(curenv && curenv->env_type == ENV_TYPE_KERNEL){
-			// Trapped from kernel thread
-			curenv->env_tf = *tf;
-			curenv->env_tf.tf_esp = read_esp() + 16; // 4 * 4bytes values are on current stack
-			curenv->env_tf.tf_ss = GD_KD;
-			tf = &curenv->env_tf;
-			__asm __volatile("movl %0, %%esp" : : "g" (thiscpu->cpu_ts.ts_esp0));
-		}
+    }
 
     /* Record that tf is the last real trapframe so print_trapframe can print
      * some additional information. */
