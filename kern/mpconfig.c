@@ -223,3 +223,7 @@ void mp_init(void)
         outb(0x23, inb(0x23) | 1);  /* Mask external interrupts. */
     }
 }
+
+unsigned int _this_cpu_stack(void){
+	return thiscpu->cpu_ts.ts_esp0;
+}

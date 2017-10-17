@@ -514,6 +514,8 @@ void env_free(struct env *e)
 				dettach_wait(tmp, e);
 				tmp = next;
 			}
+		} else if(e->env_type == ENV_TYPE_KERNEL){
+			page_decref(pa2page(PADDR((void*)ROUNDDOWN(e->env_tf.tf_esp, PGSIZE))));
 		}
 
     /* return the environment to the free list */
@@ -558,27 +560,26 @@ void env_destroy(struct env *e)
  */
 void env_pop_tf(struct trapframe *tf)
 {
-		char *str = "WTFFF????\n";
-    /* Record the CPU we are running on for user-space debugging */
+		/* Record the CPU we are running on for user-space debugging */
     curenv->env_cpunum = cpunum();
-		if(curenv->env_type == ENV_TYPE_KERNEL){
-			__asm __volatile("movl %0,%%esp\n"
-					"\tpopal\n"
-					"\tpopl %%es\n"
-					"\tpopl %%ds\n"
-					"\tpushl %%eax\n"
-					"\taddl $12, %%esp\n" // ERR
-					"\tmovl 12(%%esp), %%eax\n" // ESP -> EAX
-					"\tpopl -12(%%eax) \n" //EIP
-					"\tpopl -8(%%eax) \n" // CS
-					"\tpopl -4(%%eax) \n" // EFLAGS
-					"\tmovl -24(%%esp), %%eax \n" // RECOVERING EAX
-					"popl %%esp\n" /* skip tf_trapno and tf_errcode */
-					"subl $12,%%esp\n" /* skip tf_trapno and tf_errcode */
-					"\tiret"
-					: : "m" (tf): "memory");
-		}
-		else{
+		// if(curenv->env_type == ENV_TYPE_KERNEL){
+		// 	__asm __volatile("movl %0,%%esp\n"
+		// 			"\tpopal\n"
+		// 			"\tpopl %%es\n"
+		// 			"\tpopl %%ds\n"
+		// 			"\tpushl %%eax\n"
+		// 			"\taddl $12, %%esp\n" // ERR
+		// 			"\tmovl 12(%%esp), %%eax\n" // ESP -> EAX
+		// 			"\tpopl -12(%%eax) \n" //EIP
+		// 			"\tpopl -8(%%eax) \n" // CS
+		// 			"\tpopl -4(%%eax) \n" // EFLAGS
+		// 			"\tmovl -24(%%esp), %%eax \n" // RECOVERING EAX
+		// 			"popl %%esp\n" /* skip tf_trapno and tf_errcode */
+		// 			"subl $12,%%esp\n" /* skip tf_trapno and tf_errcode */
+		// 			"\tiret"
+		// 			: : "m" (tf): "memory");
+		// }
+		// else{
 			__asm __volatile("movl %0,%%esp\n"
 	        "\tpopal\n"
 	        "\tpopl %%es\n"
@@ -586,7 +587,7 @@ void env_pop_tf(struct trapframe *tf)
 	        "\taddl $0x8,%%esp\n" /* skip tf_trapno and tf_errcode */
 	        "\tiret"
 	        : : "g" (tf) : "memory");
-		}
+		// }
     panic("iret failed");  /* mostly to placate the compiler */
 }
 
@@ -624,8 +625,11 @@ void env_run(struct env *e)
 		 	curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
 		 unlock_env();
-		 if(curenv->env_type == ENV_TYPE_USER)
-		 	lcr3(PADDR(curenv->env_pgdir));
+		 if(curenv->env_type == ENV_TYPE_USER){
+			 lcr3(PADDR(curenv->env_pgdir));
+		 }
+		 else
+		 	lcr3(PADDR(kern_pgdir));
 		 env_pop_tf(&curenv->env_tf);
     /* LAB 3: Your code here. */
 }
@@ -751,7 +755,7 @@ void kern_thread_start(void (*fn)(void *arg), void* arg){
 	kern_thread->env_tf.tf_es = GD_KD;
 	kern_thread->env_tf.tf_ss = GD_KD;
 	kern_thread->env_tf.tf_eflags = 0x0;
-	kern_thread->env_tf.tf_esp = (unsigned int)ROUNDUP(page2kva(pp), PGSIZE);
+	kern_thread->env_tf.tf_esp = (unsigned int)page2kva(pp) + PGSIZE;
 	kern_thread->env_tf.tf_eip = (unsigned int)kern_thread_entry;
 	kern_thread->env_tf.tf_regs.reg_eax = (unsigned int)fn;
 	kern_thread->env_tf.tf_regs.reg_ebx = (unsigned int)arg;

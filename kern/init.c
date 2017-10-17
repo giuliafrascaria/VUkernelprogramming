@@ -20,7 +20,8 @@ int param = 1;
 
 void fn(void *arg){
 	for(int i = 0; i < 10; ++i){
-		cprintf("\n\n\nKERNEL THREAD, arg=%d  iter=%d\n\n\n", *((int*)arg), i);
+		cprintf("\n\n\nKERNEL THREAD, arg=%d \n\n\n", *((int*)arg));
+		kernel_thread_desched();
 	}
 }
 
@@ -56,9 +57,8 @@ void i386_init(void)
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
-    ENV_CREATE(TEST, ENV_TYPE_USER);
-
 		kern_thread_start(fn, &param);
+		ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
     /* Touch all you want. */
     ENV_CREATE(user_divzero, ENV_TYPE_USER);
