@@ -60,7 +60,7 @@ void i386_init(void)
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
-		kern_thread_start(fn, &param);
+		//kern_thread_start(fn, &param);
 		ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
     /* Touch all you want. */

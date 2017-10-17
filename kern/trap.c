@@ -93,6 +93,7 @@ void trap_init(void)
 		SETGATE(idt[T_SIMDERR], 0, GD_KT, smid_excpt_intr, 0);
 
 		SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, timer_intr, 0);
+		SETGATE(idt[IRQ_OFFSET + IRQ_KBD], 0, GD_KT, timer_intr, 0);
 
 		SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call_intr, 3);
     /* Per-CPU setup */
@@ -215,8 +216,8 @@ static void trap_dispatch(struct trapframe *tf)
 			page_fault_handler(tf);
 			return;
 		} else if(tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER){
-			if(tf->tf_cs == GD_UT)
-				lapic_eoi();
+			//if(tf->tf_cs == GD_UT)
+			lapic_eoi();
 			sched_yield();
 		} else if( tf->tf_trapno == T_BRKPT){
 			breakpoint_handler(tf);
@@ -248,8 +249,9 @@ void trap(struct trapframe *tf)
         asm volatile("hlt");
 
     // /* Re-acqurie the big kernel lock if we were halted in sched_yield(). */
-     if(xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
-			sched_yield();
+		xchg(&thiscpu->cpu_status, CPU_STARTED);
+		//  if(xchg(&thiscpu->cpu_status, CPU_STARTED) == CPU_HALTED)
+		// 	sched_yield();
     /* Check that interrupts are disabled.
      * If this assertion fails, DO NOT be tempted to fix it by inserting a "cli"
      * in the interrupt path. */
@@ -257,7 +259,7 @@ void trap(struct trapframe *tf)
 
     cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, cpunum());
 
-    if ((tf->tf_cs & 3) == 3 || (curenv->env_type == ENV_TYPE_KERNEL)) {
+    if ((tf->tf_cs & 3) == 3 || (curenv && curenv->env_type == ENV_TYPE_KERNEL)) {
         /* Trapped from user mode. */
         /* Acquire the big kernel lock before doing any serious kernel work.
          * LAB 6: Your code here. */
