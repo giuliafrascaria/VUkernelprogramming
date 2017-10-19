@@ -179,7 +179,8 @@ extern volatile pde_t uvpd[];     /* VA of current page directory */
 struct page_info {
     /* Next page on the free list. */
     struct page_info *pp_link;
-
+		struct page_info *pp_clock_next;
+		struct page_info *pp_clock_prev;
     /* pp_ref is the count of pointers (usually in page table entries)
      * to this page, for pages allocated using page_alloc.
      * Pages allocated at boot time using pmap.c's

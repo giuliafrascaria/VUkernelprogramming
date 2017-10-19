@@ -38,11 +38,11 @@ int vma_map(struct mm_struct *mm, void* va){
 			memcpy(page2kva(pp), KADDR(PTE_ADDR(*pte)), pg_size);
 			page_insert(env->env_pgdir, pp, va, perm);
 		}
-		return 0;
+		goto release;
 	}
 
 	// Mapping unmapped area;
-	region_alloc(curenv,va, PGSIZE, perm);
+	region_alloc(curenv,va, pg_size, perm);
 	if(vma->vma_type == VMA_BINARY){
 		void* start_addr = MAX(ROUNDDOWN(va, PGSIZE) , vma->vma_bin_va);
 		size_t copy_size = start_addr == vma->vma_bin_va?
@@ -51,6 +51,8 @@ int vma_map(struct mm_struct *mm, void* va){
 		if(start_addr < (vma->vma_bin_va + vma->vma_bin_filesz))
 			memcpy(start_addr, vma->vma_file + (start_addr - vma->vma_bin_va), copy_size);
 	}
+release:
+	mm->mm_pf_count += pg_size / PGSIZE;
 	return 0;
 }
 

@@ -19,6 +19,7 @@ static size_t npages_basemem;   /* Amount of base memory (in pages) */
 pde_t *kern_pgdir;                       /* Kernel's initial page directory */
 struct page_info *pages;                 /* Physical page state array */
 struct page_info *page_free_list; /* Free list of physical pages */
+struct page_info *page_used_clock; /* Free list of physical pages */
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 
 /***************************************************************
@@ -312,6 +313,7 @@ void page_init(void)
 
     size_t i;
 		page_free_list = 0;
+		page_used_clock = 0;
 		extern char mpentry_start[], mpentry_end[];
 		int in_io_area;
 		int in_kern_area;
@@ -326,6 +328,37 @@ void page_init(void)
 	        page_free_list = &pages[i];
 				}
     }
+}
+
+void __add_to_clock_list(struct page_info *pp){
+	// CLOCK FOR PAGE REPLACEMENTS
+	if(page_used_clock){
+		pp->pp_clock_next = page_used_clock;
+		pp->pp_clock_prev = page_used_clock->pp_clock_prev;
+		pp->pp_clock_prev->pp_clock_next = pp;
+	} else {
+		page_used_clock = pp;
+		pp->pp_clock_next = pp;
+		pp->pp_clock_prev = pp;
+	}
+}
+
+void __remove_from_clock_list(struct page_info *pp){
+	// CLOCK FOR PAGE REPLACEMENTS
+	struct page_info *tmp = page_used_clock;
+	struct page_info *first = page_used_clock;
+	while(tmp){
+		if(tmp == pp){
+			if(tmp == tmp->pp_clock_next){
+				// Only one element in CLOCK
+				tmp->pp_clock_next = tmp->pp_clock_prev = page_used_clock = 0;
+				return;
+			}
+			pp->pp_clock_prev->pp_clock_next = pp->pp_clock_next;
+			pp->pp_clock_next->pp_clock_prev = pp->pp_clock_prev;
+			pp->pp_clock_next = pp->pp_clock_prev = 0;
+		}
+	}
 }
 
 struct page_info *page_alloc(int alloc_flags)
@@ -376,6 +409,7 @@ struct page_info *page_alloc(int alloc_flags)
 			goto found_page;
 		}
 	found_page:
+			__add_to_clock_list(result);
 			if(alloc_flags & ALLOC_ZERO)
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
@@ -399,6 +433,7 @@ void page_free(struct page_info *pp){
 		// NORMAL PAGE deallocation
 		add_page_free_entry(pp);
 	}
+	__remove_to_clock_list(pp);
 	unlock_pagealloc();
 }
 

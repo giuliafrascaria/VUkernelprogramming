@@ -9,6 +9,7 @@ struct mm_struct {
 	struct vma *vma_free_list;
 	struct vma *mm_common_vma;
 	struct vma *mm_vma;
+	unsigned long long mm_pf_count; //counter of page frames actual mapped in pgdir
 };
 
 

@@ -617,11 +617,17 @@ void env_run(struct env *e)
      *  e->env_tf to sensible values.
      */
 		 lock_env();
+
+		 if(e->env_status == ENV_DYING){
+			 env_destroy(e);
+			 unlock_env();
+			 sched_yield();
+		 }
+
 		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
 		 curenv = e;
-		 if(curenv->env_status != ENV_DYING)
-		 	curenv->env_status = ENV_RUNNING;
+		 curenv->env_status = ENV_RUNNING;
 		 ++curenv->env_runs;
 		 unlock_env();
 		 if(curenv->env_type == ENV_TYPE_USER){
@@ -767,5 +773,27 @@ void kern_thread_start(void (*fn)(void *arg), void* arg){
 	env_run_list = kern_thread;
 release:
 	unlock_env();
+}
 
+
+void oom_kill_default(){
+	lock_env();
+	struct env *tmp = env_run_list, *good_env = tmp;
+	struct vma *vma;
+	while(tmp){
+		if(tmp->env_mm.mm_pf_count < good_env->env_mm.mm_pf_count)
+			good_env = tmp;
+		tmp = tmp->env_link;
+	}
+
+	if(!good_env)
+		goto release;
+
+	good_env->env_status = ENV_DYING;
+	vma = good_env->env_mm.mm_vma;
+	while(vma){
+		region_dealloc(good_env, vma->vma_va, vma->vma_len);
+	}
+	release:
+	unlock_env();
 }
