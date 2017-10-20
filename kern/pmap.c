@@ -20,6 +20,8 @@ pde_t *kern_pgdir;                       /* Kernel's initial page directory */
 struct page_info *pages;                 /* Physical page state array */
 struct page_info *page_free_list; /* Free list of physical pages */
 struct page_info *page_used_clock; /* Free list of physical pages */
+struct pg_swap_entry *pgswap_free_list;
+struct pg_swap_entry *pgswaps;
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 
 /***************************************************************
@@ -59,6 +61,7 @@ static void i386_detect_memory(void)
  ***************************************************************/
 
 static void mem_init_mp(void);
+static void pgswaps_init();
 static void check_page_free_list(bool only_low_memory);
 static void check_page_alloc(void);
 static void check_kern_pgdir(void);
@@ -147,7 +150,6 @@ void mem_init(void)
      * can now map memory using boot_map_region or page_insert.
      */
     page_init();
-
     check_page_free_list(1);
     check_page_alloc();
     check_page();
@@ -245,6 +247,7 @@ void mem_init(void)
 
     /* Check for huge page support */
     check_page_hugepages();
+    pgswaps_init();
 }
 
 /*
@@ -330,6 +333,50 @@ void page_init(void)
     }
 }
 
+
+static void pgswaps_init(){
+  pgswap_free_list = 0;
+  struct page_info *pp = page_alloc(ALLOC_HUGE);
+  if(!pp)
+   panic("Not enough memory for swap structures");
+  pgswaps = (struct pg_swap_entry*)(page2kva(pp));
+  for(struct pg_swap_entry *pg_swap_tmp = pgswaps ;
+  (void*)pg_swap_tmp < ((void*)pgswaps + PGSIZE);
+    ++pg_swap_tmp){
+      pg_swap_tmp->pse_next = pgswap_free_list;
+      pgswap_free_list = pg_swap_tmp;
+  }
+}
+
+struct pg_swap_entry* pgswap_alloc(){
+  struct pg_swap_entry *res = 0;
+  lock_pagealloc();
+  if(!pgswap_free_list)
+    goto release;
+  res = pgswap_free_list;
+  pgswap_free_list = pgswap_free_list->pse_next;
+release:
+  unlock_pagealloc();
+  return res;
+}
+
+void pgswap_free(struct pg_swap_entry* pg_s){
+  lock_pagealloc();
+  pg_s->pse_next = pgswap_free_list;
+  pgswap_free_list = pg_s;
+  unlock_pagealloc();
+
+}
+
+size_t page_swap_out(struct page_info* pp){
+  return 0;
+}
+
+struct page_info *page_swap_in(struct env *env, void *va){
+  return NULL;
+}
+
+
 void __add_to_clock_list(struct page_info *pp){
 	// CLOCK FOR PAGE REPLACEMENTS
 	if(page_used_clock){
@@ -409,7 +456,8 @@ struct page_info *page_alloc(int alloc_flags)
 			goto found_page;
 		}
 	found_page:
-			__add_to_clock_list(result);
+			//__add_to_clock_list(result);
+      result->pp_lru_counter = 0;
 			if(alloc_flags & ALLOC_ZERO)
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
@@ -433,7 +481,7 @@ void page_free(struct page_info *pp){
 		// NORMAL PAGE deallocation
 		add_page_free_entry(pp);
 	}
-	__remove_to_clock_list(pp);
+	//__remove_from_clock_list(pp);
 	unlock_pagealloc();
 }
 

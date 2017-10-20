@@ -19,10 +19,37 @@
 static void boot_aps(void);
 int param = 1;
 
-void fn(void *arg){
-	for(int i = 0; i < 10; ++i){
-		cprintf("\n\n\nKERNEL THREAD, arg=%d \n\n\n", *((int*)arg));
-		kernel_thread_desched();
+void kswapd(void *arg){
+	struct env *tmp;
+	pte_t *pte;
+	void* va;
+	struct page_info *pp;
+
+	while(1){
+		tmp = env_run_list;
+		while(tmp){
+			lock_env();
+			struct vma *vma = tmp->env_mm.mm_vma;
+			while(vma){
+				va = vma->vma_va;
+				for(; va < (vma->vma_va + vma->vma_len);){
+					pte = pgdir_walk(tmp->env_pgdir, va, 0);
+					int pg_size = (*pte & PTE_PS)? PGSIZE : HUGE_PGSIZE;
+					if(!(*pte & PTE_P))
+						continue;
+					pp = pa2page(PTE_ADDR(*pte));
+
+					pp->pp_lru_counter = ((*pte & PTE_A)? 1 : 0) <<
+					 (sizeof(pp->pp_lru_counter) - 1) ||
+					 (pp->pp_lru_counter >> 1);
+					if(!pp->pp_lru_counter)
+						page_swap_out(pp);
+					va = va + pg_size;
+				}
+			}
+			unlock_env();
+		}
+		kernel_thread_sleep(10000);
 	}
 }
 

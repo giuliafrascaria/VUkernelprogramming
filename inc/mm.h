@@ -1,11 +1,15 @@
 #ifndef MM_H
 #define MM_H
 
+#include <inc/spinlock.h>
 #include <inc/mmu.h>
 #include <inc/types.h>
 #include <inc/stdio.h>
 
+
+
 struct mm_struct {
+	spinlock_t mm_lock;
 	struct vma *vma_free_list;
 	struct vma *mm_common_vma;
 	struct vma *mm_vma;

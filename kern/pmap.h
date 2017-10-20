@@ -15,9 +15,16 @@ extern char bootstacktop[], bootstack[];
 
 extern struct page_info *pages;
 extern struct page_info *page_free_list;
+extern struct pg_swap_entry *pgswap_free_list;
 extern size_t npages;
 
 extern pde_t *kern_pgdir;
+
+struct pg_swap_entry{
+  struct env *pse_env;
+  void *va;
+  struct pg_swap_entry *pse_next;
+};
 
 
 /*
@@ -83,6 +90,12 @@ void *mmio_map_region(physaddr_t pa, size_t size);
 
 int  user_mem_check(struct env *env, const void *va, size_t len, int perm);
 void user_mem_assert(struct env *env, const void *va, size_t len, int perm);
+
+struct pg_swap_entry *pgswap_alloc();
+void pgswap_free(struct pg_swap_entry*);
+
+size_t page_swap_out(struct page_info*);
+struct page_info *page_swap_in(struct env*, void *va);
 
 static inline physaddr_t page2pa(struct page_info *pp)
 {

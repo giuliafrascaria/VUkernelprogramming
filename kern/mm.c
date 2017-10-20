@@ -5,6 +5,7 @@
 
 #include <kern/env.h>
 #include <kern/pmap.h>
+#include <kern/spinlock.h>
 
 int vma_map(struct mm_struct *mm, void* va){
 	struct vma *vma = find_vma(va, mm);
@@ -13,9 +14,15 @@ int vma_map(struct mm_struct *mm, void* va){
 	int perm;
 	int pg_flags;
 	size_t pg_size;
+	int res = 0;
 
-	if(!vma)
-		return -1;
+	spin_lock(&mm->mm_lock);
+
+	if(!vma){
+		res = -1;
+		goto ret;
+	}
+
 	env = container_of(mm, struct env, env_mm);
 	pte = pgdir_walk(env->env_pgdir, va, 0);
 	perm = __prot2perm(vma->vma_prot);
@@ -23,8 +30,10 @@ int vma_map(struct mm_struct *mm, void* va){
 	pg_flags = ALLOC_PREMAPPED | (pte && (*pte & PTE_PS)? ALLOC_HUGE : 0);
 
 	// Simple protection fail
-	if(pte && (*pte & PTE_P) && !(vma->vma_prot & PROT_WRITE))
-		return -1;
+	if(pte && (*pte & PTE_P) && !(vma->vma_prot & PROT_WRITE)){
+		res = -1;
+		goto ret;
+	}
 
 		// COW section
 	if(pte && (*pte & PTE_P) && (vma->vma_prot & PROT_WRITE) && ((~*pte) & PTE_W)){
@@ -53,7 +62,9 @@ int vma_map(struct mm_struct *mm, void* va){
 	}
 release:
 	mm->mm_pf_count += pg_size / PGSIZE;
-	return 0;
+ret:
+	spin_unlock(&mm->mm_lock);
+	return res;
 }
 
 int __vma_map(struct mm_struct *mm, void* va, size_t size){
@@ -94,9 +105,11 @@ struct vma* find_vma_prev(void *addr, struct mm_struct *mm){
 
 void *do_map(struct mm_struct *mm,  void* file, size_t filesz, void* addr,
 	unsigned int len, int prot, int type){
+		void *res = (void*)-1;
+		spin_lock(&mm->mm_lock);
 		struct vma *vma = mm->vma_free_list;
 		if(!page_free_list)
-			return (void*)-1;
+			goto release;
 		vma->vma_va = ROUNDDOWN(addr, PGSIZE);
 		vma->vma_len = ROUNDUP((len + addr) - vma->vma_va, PGSIZE);
 		vma->vma_type = type;
@@ -109,7 +122,10 @@ void *do_map(struct mm_struct *mm,  void* file, size_t filesz, void* addr,
 		__inject_vma(vma, &mm->mm_vma);
 		vma_merge(vma, vma->vma_next);
 		vma_merge(find_vma_prev(vma->vma_va, mm), vma);
-		return vma->vma_va;
+		res = vma->vma_va;
+	release:
+		spin_unlock(&mm->mm_lock);
+		return res;
 }
 
 void vma_merge(struct vma *first, struct vma *second){
@@ -143,12 +159,13 @@ void vma_split(struct vma *vma, void* addr){
 }
 
 void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
+	spin_lock(&mm->mm_lock);
 	addr = ROUNDDOWN(addr, PGSIZE);
 	len = ROUNDUP(len, PGSIZE);
 	struct vma *to_delete;
 	struct vma *vma = find_vma(addr, mm), *vma_prev = find_vma_prev(addr, mm), *vma_end;
 	if(!vma)
-		return;
+		goto release;
 	region_dealloc(curenv, addr, len);
 	if(addr != vma->vma_va){
 		vma_split(vma, addr);
@@ -172,6 +189,8 @@ void do_munmap(struct mm_struct *mm, void* addr, unsigned int len){
 		__inject_vma(vma, &mm->vma_free_list);
 		vma = vma->vma_next;
 	}while(vma != vma_end->vma_next);
+release:
+	spin_lock(&mm->mm_lock);
 }
 
 

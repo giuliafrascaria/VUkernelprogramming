@@ -5,6 +5,7 @@
 
 #include <inc/env.h>
 #include <kern/cpu.h>
+#include <inc/x86.h>
 
 extern struct env *envs;            /* All environments */
 extern struct env *env_run_list;            /* All runnable environments */
@@ -42,6 +43,11 @@ static inline void kernel_thread_desched(){
 	:: "g"(IRQ_OFFSET + IRQ_TIMER));
 }
 
+static inline void kernel_thread_sleep(unsigned long long nanosec){
+	unsigned long long cur_time = read_tsc();
+	while(read_tsc() < (cur_time + nanosec))
+		kernel_thread_desched();
+}
 /* Without this extra macro, we couldn't pass macros like TEST to ENV_CREATE
  * because of the C pre-processor's argument prescan rule. */
 #define ENV_PASTE3(x, y, z) x ## y ## z

@@ -181,11 +181,12 @@ struct page_info {
     struct page_info *pp_link;
 		struct page_info *pp_clock_next;
 		struct page_info *pp_clock_prev;
+    struct pg_swap_entry *pp_pse;
     /* pp_ref is the count of pointers (usually in page table entries)
      * to this page, for pages allocated using page_alloc.
      * Pages allocated at boot time using pmap.c's
      * boot_alloc do not have valid reference count fields. */
-
+    uint64_t pp_lru_counter;
     uint16_t pp_ref;
 		char pp_flags;
 };
