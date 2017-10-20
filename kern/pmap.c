@@ -5,11 +5,13 @@
 #include <inc/error.h>
 #include <inc/string.h>
 #include <inc/assert.h>
+#include <inc/memlayout.h>
 
 #include <kern/pmap.h>
 #include <kern/kclock.h>
 #include <kern/env.h>
 #include <kern/spinlock.h>
+#include <kern/ide.h>
 
 /* These variables are set by i386_detect_memory() */
 size_t npages;                  /* Amount of physical memory (in pages) */
@@ -23,6 +25,8 @@ struct page_info *page_used_clock; /* Free list of physical pages */
 struct pg_swap_entry *pgswap_free_list;
 struct pg_swap_entry *pgswaps;
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
+static unsigned int swap_slots[SWAP_SLOTS_NUMBER];
+static struct pg_swap_entry* swap_env_map[SWAP_SLOTS_NUMBER];
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -346,6 +350,7 @@ static void pgswaps_init(){
       pg_swap_tmp->pse_next = pgswap_free_list;
       pgswap_free_list = pg_swap_tmp;
   }
+  memset(swap_slots, 0x0, sizeof(unsigned int) * SWAP_SLOTS_NUMBER);
 }
 
 struct pg_swap_entry* pgswap_alloc(){
@@ -369,7 +374,30 @@ void pgswap_free(struct pg_swap_entry* pg_s){
 }
 
 size_t page_swap_out(struct page_info* pp){
-  return 0;
+  struct pg_swap_entry *pg_swap = pp->pp_pse, *tmp;
+  pte_t *pte;
+  unsigned int slot_i = 0;
+
+  while(swap_slots[slot_i])
+    ++slot_i;
+  if(slot_i > SWAP_SLOTS_NUMBER)
+    return 0; //Invalid slot number (first slot is used for sanity check)
+
+  while(pg_swap){
+    tmp = pg_swap;
+    pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
+    if(!pte || !(*pte & PTE_P))
+      panic("page swap entry is incorrect");
+    *pte = slot_i || (*pte & 0xFFF);
+    *pte &= ~PTE_P;
+    pg_swap = pg_swap->pse_next;
+    //pgswap_free(tmp);
+  }
+  swap_env_map[slot_i] = pp->pp_pse;
+  pp->pp_pse = 0;
+  // Writing page frame on disk
+  ide_write_page(slot_i, page2kva(pp));
+  return slot_i;
 }
 
 struct page_info *page_swap_in(struct env *env, void *va){

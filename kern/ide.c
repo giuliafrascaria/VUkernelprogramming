@@ -152,3 +152,21 @@ int ide_init(void)
     ide_identify();
     return 0;
 }
+
+void ide_write_page(size_t sector, char* buf){
+  int nsectors = PGSIZE/SECTSIZE;
+  ide_start_read(sector, nsectors);
+  for (int i = 0; i < nsectors; i++) {
+    while (!ide_is_ready()){};
+      ide_write_sector(buf + i*SECTSIZE);
+    }
+}
+
+void ide_read_page(size_t sector, char* buf){
+  int nsectors = PGSIZE/SECTSIZE;
+  ide_start_read(sector, nsectors);
+  for (int i = 0; i < nsectors; i++) {
+    while (!ide_is_ready()){};
+      ide_read_sector(buf + i*SECTSIZE);
+    }
+}

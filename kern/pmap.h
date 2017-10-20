@@ -22,7 +22,7 @@ extern pde_t *kern_pgdir;
 
 struct pg_swap_entry{
   struct env *pse_env;
-  void *va;
+  void *pse_va;
   struct pg_swap_entry *pse_next;
 };
 
@@ -34,6 +34,7 @@ struct pg_swap_entry{
  * non-kernel virtual address.
  */
 #define PADDR(kva) _paddr(__FILE__, __LINE__, kva)
+#define SWAP_SLOTS_NUMBER (128 * 1024 * 1024 / PGSIZE)
 
 static inline physaddr_t _paddr(const char *file, int line, void *kva)
 {
