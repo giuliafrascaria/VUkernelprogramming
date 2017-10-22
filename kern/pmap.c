@@ -27,6 +27,7 @@ struct pg_swap_entry *pgswaps;
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 static unsigned int swap_slots[SWAP_SLOTS_NUMBER];
 static struct pg_swap_entry* swap_env_map[SWAP_SLOTS_NUMBER];
+static spinlock_t pg_swap_lock;
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -360,6 +361,7 @@ struct pg_swap_entry* pgswap_alloc(){
     goto release;
   res = pgswap_free_list;
   pgswap_free_list = pgswap_free_list->pse_next;
+  memset(res, 0x0, sizeof(struct pg_swap_entry));
 release:
   unlock_pagealloc();
   return res;
@@ -376,32 +378,76 @@ void pgswap_free(struct pg_swap_entry* pg_s){
 size_t page_swap_out(struct page_info* pp){
   struct pg_swap_entry *pg_swap = pp->pp_pse, *tmp;
   pte_t *pte;
-  unsigned int slot_i = 0;
-
-  while(swap_slots[slot_i])
-    ++slot_i;
-  if(slot_i > SWAP_SLOTS_NUMBER)
-    return 0; //Invalid slot number (first slot is used for sanity check)
+  size_t res = 0;
+  unsigned int slot_i = 1;
+  spin_lock(&pg_swap_lock);
+  cprintf("KSWAPD: SWAPPED OUT BEGINNING\n");
+  while(swap_slots[slot_i] > 0){
+      ++slot_i;
+      if(slot_i > SWAP_SLOTS_NUMBER)
+        goto release; //Invalid slot number (first slot is used for sanity check)
+  }
 
   while(pg_swap){
     tmp = pg_swap;
     pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
     if(!pte || !(*pte & PTE_P))
       panic("page swap entry is incorrect");
-    *pte = slot_i || (*pte & 0xFFF);
+    *pte = (slot_i << 12) | (*pte & 0xFFF);
     *pte &= ~PTE_P;
     pg_swap = pg_swap->pse_next;
+    page_decref(pp);
+    ++swap_slots[slot_i];
     //pgswap_free(tmp);
   }
   swap_env_map[slot_i] = pp->pp_pse;
   pp->pp_pse = 0;
   // Writing page frame on disk
-  ide_write_page(slot_i, page2kva(pp));
-  return slot_i;
+  ide_write_page(slot_i * PGSIZE / SECTSIZE, page2kva(pp));
+  cprintf("KSWAPD: SWAPPED OUT PAGE %d  to slot_i %d\n", pp - pages, slot_i * PGSIZE / SECTSIZE);
+  // for(int i = 0 ; i < (PGSIZE - 10); ++i)
+  //   cprintf("%02x ",((char*)page2kva(pp))[i]);
+  // cprintf("END\n");
+  res = slot_i;
+release:
+  spin_unlock(&pg_swap_lock);
+  return res;
 }
 
 struct page_info *page_swap_in(struct env *env, void *va){
-  return NULL;
+  pte_t *pte = pgdir_walk(env->env_pgdir, va, 0);
+  struct page_info *res = NULL;
+  struct pg_swap_entry *pg_swap;
+  int slot_i;
+  cprintf("KSWAPD: SWAPPED IN BEGINNING\n");
+  spin_lock(&pg_swap_lock);
+  if(!pte)
+    goto release;
+  slot_i = PTE_ADDR(*pte) >> 12;
+  if(slot_i <=0)
+    goto release;
+  res = page_alloc(ALLOC_PREMAPPED);
+  if(!res)
+    goto release;
+  ide_read_page(slot_i * PGSIZE / SECTSIZE, page2kva(res));
+  pg_swap = swap_env_map[slot_i];
+  while(pg_swap){
+    pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
+    // *pte = (unsigned int)page2pa(res) | (*pte & 0xFFF);
+    // *pte |= PTE_P;
+    page_insert(pg_swap->pse_env->env_pgdir, res, pg_swap->pse_va, (*pte & 0xFFF));
+    pg_swap = pg_swap->pse_next;
+  }
+  res->pp_pse = swap_env_map[slot_i];
+  swap_env_map[slot_i] = 0;
+  swap_slots[slot_i] = 0;
+  cprintf("KSWAPD: SWAPPED IN PAGE %d from slot_i= %d\n", res - pages, slot_i * PGSIZE / SECTSIZE);
+  // for(int i = 0 ; i < PGSIZE - 1; ++i)
+  //   cprintf("%02x ",((char*)page2kva(res))[i]);
+  // cprintf("END\n");
+release:
+  spin_unlock(&pg_swap_lock);
+  return res;
 }
 
 
@@ -486,7 +532,7 @@ struct page_info *page_alloc(int alloc_flags)
 	found_page:
 			//__add_to_clock_list(result);
       result->pp_lru_counter = 0;
-			if(alloc_flags & ALLOC_ZERO)
+			if(page2pa(result) < PADDR((void*)premapped_rbound))
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
 		unlock_pagealloc();

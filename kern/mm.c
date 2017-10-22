@@ -17,7 +17,7 @@ int vma_map(struct mm_struct *mm, void* va){
 	int res = 0;
 
 	spin_lock(&mm->mm_lock);
-
+	//lock_env();
 	if(!vma){
 		res = -1;
 		goto ret;
@@ -50,6 +50,13 @@ int vma_map(struct mm_struct *mm, void* va){
 		goto release;
 	}
 
+	if(pte && !(*pte & PTE_P) && (PTE_ADDR(*pte) != 0)){
+		// Swapped out page!!!
+		struct env *env = container_of(mm, struct env, env_mm);
+		page_swap_in(env, va);
+		goto release;
+	}
+
 	// Mapping unmapped area;
 	region_alloc(curenv,va, pg_size, perm);
 	if(vma->vma_type == VMA_BINARY){
@@ -63,6 +70,7 @@ int vma_map(struct mm_struct *mm, void* va){
 release:
 	mm->mm_pf_count += pg_size / PGSIZE;
 ret:
+	//unlock_env();
 	spin_unlock(&mm->mm_lock);
 	return res;
 }

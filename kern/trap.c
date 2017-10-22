@@ -228,7 +228,7 @@ static void trap_dispatch(struct trapframe *tf)
 		}
 
 		/* Unexpected trap: The user process or the kernel has a bug. */
-    print_trapframe(tf);
+    //print_trapframe(tf);
     if (tf->tf_cs == GD_KT)
         panic("unhandled trap in kernel");
     else {
@@ -257,7 +257,7 @@ void trap(struct trapframe *tf)
      * in the interrupt path. */
     assert(!(read_eflags() & FL_IF));
 
-    cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, cpunum());
+    //cprintf("Incoming TRAP frame at %p on CPU %d\n", tf, cpunum());
 
     if ((tf->tf_cs & 3) == 3 || (curenv && curenv->env_type == ENV_TYPE_KERNEL)) {
         /* Trapped from user mode. */
@@ -323,7 +323,7 @@ void page_fault_handler(struct trapframe *tf)
 
 		cprintf("[%08x] user fault va %08x ip %08x\n",
 				curenv->env_id, fault_va, tf->tf_eip);
-		print_trapframe(tf);
+		//print_trapframe(tf);
 
 		if(tf->tf_cs == GD_KT)
 			panic("Kernel space page fault");

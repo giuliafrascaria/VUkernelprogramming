@@ -336,10 +336,12 @@ void region_alloc(struct env *e, void *va, size_t len, int perm){
 			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
 			 if(!pp)
 			 	goto no_memory;
-       pg_swap = pgswap_alloc();
-       pg_swap->pse_env = e;
-       pg_swap->pse_va = va + page_i * PGSIZE;
-       pp->pp_pse = pg_swap;
+     if(curenv == e){
+           pg_swap = pgswap_alloc();
+           pg_swap->pse_env = e;
+           pg_swap->pse_va = va + page_i * PGSIZE;
+           pp->pp_pse = pg_swap;
+     }
 			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, perm);
 		 	}
 			goto release;
