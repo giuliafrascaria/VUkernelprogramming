@@ -49,7 +49,10 @@ void kswapd(void *arg){
 					 (sizeof(pp->pp_lru_counter) - 1) ||
 					 (pp->pp_lru_counter >> 1);
 					if(!pp->pp_lru_counter){
-						page_swap_out(pp);
+						if(!page_swap_out(pp)){
+							spin_unlock(&tmp->env_mm.mm_lock);
+							goto sleep;
+						}
 						tmp->env_mm.mm_pf_count -= PGSIZE;
 					}
 					*pte &= ~PTE_A;
@@ -60,8 +63,9 @@ void kswapd(void *arg){
 			}
 			 tmp = tmp->env_link;
 		}
+	sleep:
 		unlock_env();
-		kernel_thread_desched(0);
+		kernel_thread_sleep(10000000);
 	}
 }
 
@@ -99,8 +103,8 @@ void i386_init(void)
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
-		ENV_CREATE(TEST, ENV_TYPE_USER);
 		kern_thread_start(kswapd, &param);
+		ENV_CREATE(TEST, ENV_TYPE_USER);
 #else
     /* Touch all you want. */
     ENV_CREATE(user_divzero, ENV_TYPE_USER);

@@ -346,7 +346,7 @@ static void pgswaps_init(){
    panic("Not enough memory for swap structures");
   pgswaps = (struct pg_swap_entry*)(page2kva(pp));
   for(struct pg_swap_entry *pg_swap_tmp = pgswaps ;
-  (void*)pg_swap_tmp < ((void*)pgswaps + PGSIZE);
+  (void*)pg_swap_tmp < ((void*)pgswaps + HUGE_PGSIZE);
     ++pg_swap_tmp){
       pg_swap_tmp->pse_next = pgswap_free_list;
       pgswap_free_list = pg_swap_tmp;
@@ -380,8 +380,9 @@ size_t page_swap_out(struct page_info* pp){
   pte_t *pte;
   size_t res = 0;
   unsigned int slot_i = 1;
-  spin_lock(&pg_swap_lock);
   cprintf("KSWAPD: SWAPPED OUT BEGINNING\n");
+  spin_lock(&pg_swap_lock);
+
   while(swap_slots[slot_i] > 0){
       ++slot_i;
       if(slot_i > SWAP_SLOTS_NUMBER)
@@ -392,7 +393,7 @@ size_t page_swap_out(struct page_info* pp){
     tmp = pg_swap;
     pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
     if(!pte || !(*pte & PTE_P))
-      panic("page swap entry is incorrect");
+      goto release; //panic("page swap entry is incorrect");
     *pte = (slot_i << 12) | (*pte & 0xFFF);
     *pte &= ~PTE_P;
     pg_swap = pg_swap->pse_next;

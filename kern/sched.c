@@ -80,7 +80,7 @@ void sched_halt(void)
     for (i = 0; i < NENV; i++) {
         if ((envs[i].env_status == ENV_RUNNABLE ||
              envs[i].env_status == ENV_RUNNING ||
-             envs[i].env_status == ENV_DYING))
+             envs[i].env_status == ENV_DYING) && (envs[i].env_type == ENV_TYPE_USER) )
             break;
     }
 		/* Release the big kernel lock as if we were "leaving" the kernel */
