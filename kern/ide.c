@@ -37,7 +37,6 @@
 static int diskno = 1;
 /* Number of sectors on our disk, initialized by ide_identify. */
 static uint32_t disk_sectors;
-static spinlock_t disk_lock;
 
 int ide_is_ready(void)
 {
@@ -153,26 +152,4 @@ int ide_init(void)
     ide_set_disk(1);
     ide_identify();
     return 0;
-}
-
-void ide_write_page(size_t sector, char* buf){
-  spin_lock(&disk_lock);
-  int nsectors = PGSIZE/SECTSIZE;
-  ide_start_readwrite(sector, nsectors, 1);
-  for (int i = 0; i < nsectors; i++) {
-    while (!ide_is_ready()){};
-      ide_write_sector(buf + i*SECTSIZE);
-    }
-  spin_unlock(&disk_lock);
-}
-
-void ide_read_page(size_t sector, char* buf){
-  spin_lock(&disk_lock);
-  int nsectors = PGSIZE/SECTSIZE;
-  ide_start_readwrite(sector, nsectors, 0);
-  for (int i = 0; i < nsectors; i++) {
-    while (!ide_is_ready()){};
-      ide_read_sector(buf + i*SECTSIZE);
-    }
-  spin_unlock(&disk_lock);
 }

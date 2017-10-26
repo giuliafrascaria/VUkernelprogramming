@@ -629,7 +629,10 @@ void env_run(struct env *e)
 			 env_destroy(e);
 			 unlock_env();
 			 sched_yield();
-		 }
+		 } else  if(e->env_status == ENV_NOT_RUNNABLE){
+ 			 unlock_env();
+ 			 sched_yield();
+ 		 }
 
 		 if(curenv && curenv->env_status == ENV_RUNNING)
 		 	curenv->env_status = ENV_RUNNABLE;
@@ -784,7 +787,6 @@ release:
 
 
 void oom_kill_default(){
-	lock_env();
 	struct env *tmp = env_run_list, *good_env = tmp;
 	struct vma *vma;
 	while(tmp){
@@ -795,12 +797,13 @@ void oom_kill_default(){
 
 	if(!good_env)
 		goto release;
-
-	good_env->env_status = ENV_DYING;
-	vma = good_env->env_mm.mm_vma;
-	while(vma){
-		region_dealloc(good_env, vma->vma_va, vma->vma_len);
-	}
+  unlock_env();
+  cprintf(" OOM KILLER: KILLING ENV[%08x]\n", good_env->env_id);
+	env_destroy(good_env);
+	// vma = good_env->env_mm.mm_vma;
+	// while(vma){
+	// 	region_dealloc(good_env, vma->vma_va, vma->vma_len);
+	// }
 	release:
-	unlock_env();
+  return;
 }

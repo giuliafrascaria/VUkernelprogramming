@@ -20,6 +20,14 @@ extern size_t npages;
 
 extern pde_t *kern_pgdir;
 
+// swap queue entity for implementing async swapping
+struct swap_queue_entry{
+  struct env *sqe_env;
+  struct page_info *sqe_pp;
+  struct swap_queue_entry *sqe_next;
+  void *sqe_va;
+};
+
 struct pg_swap_entry{
   struct env *pse_env;
   void *pse_va;
@@ -95,8 +103,11 @@ void user_mem_assert(struct env *env, const void *va, size_t len, int perm);
 struct pg_swap_entry *pgswap_alloc();
 void pgswap_free(struct pg_swap_entry*);
 
-size_t page_swap_out(struct page_info*);
-struct page_info *page_swap_in(struct env*, void *va);
+void page_swap_out(struct env*, struct page_info*);
+void page_swap_in(struct env*, void *va);
+
+void kswapd(void *arg);
+void __kswapd(void *arg);
 
 static inline physaddr_t page2pa(struct page_info *pp)
 {

@@ -24,10 +24,16 @@ struct page_info *page_free_list; /* Free list of physical pages */
 struct page_info *page_used_clock; /* Free list of physical pages */
 struct pg_swap_entry *pgswap_free_list;
 struct pg_swap_entry *pgswaps;
+struct swap_queue_entry *swapq_entries;
+struct swap_queue_entry *sqe_free_list;
+struct swap_queue_entry *sqe_fifo;
 size_t premapped_rbound = KERNBASE + HUGE_PGSIZE;
 static unsigned int swap_slots[SWAP_SLOTS_NUMBER];
 static struct pg_swap_entry* swap_env_map[SWAP_SLOTS_NUMBER];
+
 static spinlock_t pg_swap_lock;
+static spinlock_t sqe_lock;
+static spinlock_t disk_lock;
 
 /***************************************************************
  * Detect machine's physical memory setup.
@@ -155,9 +161,9 @@ void mem_init(void)
      * can now map memory using boot_map_region or page_insert.
      */
     page_init();
-    check_page_free_list(1);
-    check_page_alloc();
-    check_page();
+    //check_page_free_list(1);
+    //check_page_alloc();
+    //check_page();
 
     /*********************************************************************
      * Now we set up virtual memory */
@@ -227,7 +233,7 @@ void mem_init(void)
     mem_init_mp();
 
     /* Check that the initial page directory has been set up correctly. */
-    check_kern_pgdir();
+    //check_kern_pgdir();
 
     /* Switch from the minimal entry page directory to the full kern_pgdir
     / * page table we just created.  Our instruction pointer should be
@@ -238,7 +244,7 @@ void mem_init(void)
      * kern_pgdir wrong. */
     lcr3(PADDR(kern_pgdir));
 		premapped_rbound = MAX_VA;
-    check_page_free_list(0);
+    //check_page_free_list(0);
 
     /* entry.S set the really important flags in cr0 (including enabling
      * paging).  Here we configure the rest of the flags that we care about. */
@@ -248,10 +254,10 @@ void mem_init(void)
     lcr0(cr0);
 
     /* Some more checks, only possible after kern_pgdir is installed. */
-    check_page_installed_pgdir();
+    //check_page_installed_pgdir();
 
     /* Check for huge page support */
-    check_page_hugepages();
+    //check_page_hugepages();
     pgswaps_init();
 }
 
@@ -341,17 +347,46 @@ void page_init(void)
 
 static void pgswaps_init(){
   pgswap_free_list = 0;
-  struct page_info *pp = page_alloc(ALLOC_HUGE);
-  if(!pp)
+  struct page_info *pp = page_alloc(ALLOC_HUGE),  *pp2 = page_alloc(ALLOC_HUGE);
+  if(!pp || !pp2)
    panic("Not enough memory for swap structures");
+
   pgswaps = (struct pg_swap_entry*)(page2kva(pp));
+  swapq_entries = (struct swap_queue_entry*)(page2kva(pp2));
   for(struct pg_swap_entry *pg_swap_tmp = pgswaps ;
   (void*)pg_swap_tmp < ((void*)pgswaps + HUGE_PGSIZE);
     ++pg_swap_tmp){
       pg_swap_tmp->pse_next = pgswap_free_list;
       pgswap_free_list = pg_swap_tmp;
   }
+  sqe_free_list = 0;
+  for(struct swap_queue_entry *tmp = swapq_entries;
+    (void*)tmp < (void*)swapq_entries + HUGE_PGSIZE; ++tmp){
+    tmp->sqe_next = sqe_free_list;
+    sqe_free_list = tmp;
+  }
   memset(swap_slots, 0x0, sizeof(unsigned int) * SWAP_SLOTS_NUMBER);
+}
+
+struct swap_queue_entry* sqe_alloc(){
+  struct swap_queue_entry *res = 0;
+  lock_pagealloc();
+  if(!sqe_free_list)
+    goto release;
+  res = sqe_free_list;
+  sqe_free_list = sqe_free_list->sqe_next;
+  memset(res, 0x0, sizeof(struct swap_queue_entry));
+release:
+  unlock_pagealloc();
+  return res;
+}
+
+void sqe_free(struct swap_queue_entry* sqe_e){
+  lock_pagealloc();
+  sqe_e->sqe_next = sqe_free_list;
+  sqe_free_list = sqe_e;
+  unlock_pagealloc();
+
 }
 
 struct pg_swap_entry* pgswap_alloc(){
@@ -375,53 +410,176 @@ void pgswap_free(struct pg_swap_entry* pg_s){
 
 }
 
-size_t page_swap_out(struct page_info* pp){
+void page_swap_out(struct env *env, struct page_info* pp){
+  spin_lock(&sqe_lock);
+  //lock_env();
+  //env->env_status = ENV_NOT_RUNNABLE;
+  //unlock_env();
+  struct swap_queue_entry *sqe_e = sqe_alloc();
+  if(!sqe_e)
+    panic("OUT OF STRUCTURE CACHE[SWAP_QUEUE_ENTRY]");
+  sqe_e->sqe_env = env;
+  sqe_e->sqe_pp = pp;
+  sqe_e->sqe_next = sqe_fifo;
+  sqe_fifo = sqe_e;
+  spin_unlock(&sqe_lock);
+};
+
+void page_swap_in(struct env *env, void *va){
+  spin_lock(&sqe_lock);
+  env->env_status = ENV_NOT_RUNNABLE;
+  remove_entry_from_list(struct env, env, env_run_list, env_link);
+  struct swap_queue_entry *sqe_e = sqe_alloc();
+  if(!sqe_e)
+    panic("OUT OF STRUCTURE CACHE[SWAP_QUEUE_ENTRY]");
+  sqe_e->sqe_env = env;
+  sqe_e->sqe_va = va;
+  sqe_e->sqe_next = sqe_fifo;
+  sqe_fifo = sqe_e;
+  spin_unlock(&sqe_lock);
+}
+
+
+void ide_write_page_blocking(size_t sector, char* buf){
+  spin_lock(&disk_lock);
+  int nsectors = PGSIZE/SECTSIZE;
+  ide_start_readwrite(sector, nsectors, 1);
+  for (int i = 0; i < nsectors; i++) {
+    while (!ide_is_ready()){};
+      ide_write_sector(buf + i*SECTSIZE);
+    }
+  spin_unlock(&disk_lock);
+}
+
+void ide_write_page(size_t sector, char* buf){
+  spin_lock(&disk_lock);
+  int nsectors = PGSIZE/SECTSIZE;
+  ide_start_readwrite(sector, nsectors, 1);
+  for (int i = 0; i < nsectors; i++) {
+    while (!ide_is_ready()){
+      spin_unlock(&disk_lock);
+      kernel_thread_desched();
+      spin_lock(&disk_lock);
+    };
+      ide_write_sector(buf + i*SECTSIZE);
+    }
+  spin_unlock(&disk_lock);
+}
+
+void ide_read_page(size_t sector, char* buf){
+  spin_lock(&disk_lock);
+  int nsectors = PGSIZE/SECTSIZE;
+  ide_start_readwrite(sector, nsectors, 0);
+  for (int i = 0; i < nsectors; i++) {
+    while (!ide_is_ready()){
+      spin_unlock(&disk_lock);
+      kernel_thread_desched();
+      spin_lock(&disk_lock);
+    };
+      ide_read_sector(buf + i*SECTSIZE);
+    }
+  spin_unlock(&disk_lock);
+}
+
+
+size_t __page_swap_out_nonblocking(struct page_info* pp){
+  struct pg_swap_entry *pg_swap = pp->pp_pse, *tmp;
+  pte_t *pte;
+  size_t res = 0;
+  unsigned int slot_i = 1;
+  cprintf("KSWAPD: SWAPPED OUT BEGINNING\n");
+  while(swap_slots[slot_i] > 0){
+      ++slot_i;
+      if(slot_i > SWAP_SLOTS_NUMBER)
+        goto release; //Invalid slot number (first slot is used for sanity check)
+  }
+  while(pg_swap){
+    tmp = pg_swap;
+    if(!pg_swap->pse_env->env_pgdir)
+      continue;
+    pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
+    if(!pte || !(*pte & PTE_P))
+      goto release; //panic("page swap entry is incorrect");
+    *pte = (slot_i << 12) | (*pte & 0xFFF);
+    pg_swap->pse_env->env_mm.mm_pf_count -= PGSIZE;
+    *pte &= ~PTE_P;
+    pg_swap = pg_swap->pse_next;
+    page_decref(pp);
+    ++swap_slots[slot_i];
+    //tlb_invalidate(pg_swap->pse_env->env_pgdir, pg_swap->pse_va);
+    //pgswap_free(tmp);
+  }
+  swap_env_map[slot_i] = pp->pp_pse;
+  pp->pp_pse = 0;
+  // Writing page frame on disk
+  ide_write_page_blocking(slot_i * PGSIZE / SECTSIZE, page2kva(pp));
+  // for(int i = 0 ; i < (PGSIZE - 10); ++i)
+  //   cprintf("%02x ",((char*)page2kva(pp))[i]);
+  // cprintf("END\n");
+  res = slot_i;
+release:
+  cprintf("KSWAPD: SWAPPED OUT PAGE\n");
+  return res;
+}
+
+size_t __page_swap_out(struct page_info* pp){
   struct pg_swap_entry *pg_swap = pp->pp_pse, *tmp;
   pte_t *pte;
   size_t res = 0;
   unsigned int slot_i = 1;
   cprintf("KSWAPD: SWAPPED OUT BEGINNING\n");
   spin_lock(&pg_swap_lock);
-
+  lock_env();
   while(swap_slots[slot_i] > 0){
       ++slot_i;
       if(slot_i > SWAP_SLOTS_NUMBER)
         goto release; //Invalid slot number (first slot is used for sanity check)
   }
-
   while(pg_swap){
     tmp = pg_swap;
+    if(!pg_swap->pse_env->env_pgdir)
+      continue;
     pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
     if(!pte || !(*pte & PTE_P))
       goto release; //panic("page swap entry is incorrect");
+    spin_lock(&pg_swap->pse_env->env_mm.mm_lock);
     *pte = (slot_i << 12) | (*pte & 0xFFF);
+    pg_swap->pse_env->env_mm.mm_pf_count -= PGSIZE;
     *pte &= ~PTE_P;
+    spin_unlock(&pg_swap->pse_env->env_mm.mm_lock);
     pg_swap = pg_swap->pse_next;
     page_decref(pp);
     ++swap_slots[slot_i];
+    //tlb_invalidate(pg_swap->pse_env->env_pgdir, pg_swap->pse_va);
     //pgswap_free(tmp);
   }
   swap_env_map[slot_i] = pp->pp_pse;
   pp->pp_pse = 0;
   // Writing page frame on disk
+  spin_unlock(&pg_swap_lock);
+  unlock_env();
   ide_write_page(slot_i * PGSIZE / SECTSIZE, page2kva(pp));
-  cprintf("KSWAPD: SWAPPED OUT PAGE %d  to slot_i %d\n", pp - pages, slot_i * PGSIZE / SECTSIZE);
+  spin_lock(&pg_swap_lock);
+  lock_env();
   // for(int i = 0 ; i < (PGSIZE - 10); ++i)
   //   cprintf("%02x ",((char*)page2kva(pp))[i]);
   // cprintf("END\n");
   res = slot_i;
 release:
+  cprintf("KSWAPD: SWAPPED OUT PAGE\n");
+  unlock_env();
   spin_unlock(&pg_swap_lock);
   return res;
 }
 
-struct page_info *page_swap_in(struct env *env, void *va){
+struct page_info* __page_swap_in(struct env *env, void *va){
   pte_t *pte = pgdir_walk(env->env_pgdir, va, 0);
   struct page_info *res = NULL;
   struct pg_swap_entry *pg_swap;
   int slot_i;
   cprintf("KSWAPD: SWAPPED IN BEGINNING\n");
   spin_lock(&pg_swap_lock);
+  lock_env();
   if(!pte)
     goto release;
   slot_i = PTE_ADDR(*pte) >> 12;
@@ -430,7 +588,11 @@ struct page_info *page_swap_in(struct env *env, void *va){
   res = page_alloc(ALLOC_PREMAPPED);
   if(!res)
     goto release;
+  spin_unlock(&pg_swap_lock);
+  unlock_env();
   ide_read_page(slot_i * PGSIZE / SECTSIZE, page2kva(res));
+  lock_env();
+  spin_lock(&pg_swap_lock);
   pg_swap = swap_env_map[slot_i];
   while(pg_swap){
     pte = pgdir_walk(pg_swap->pse_env->env_pgdir, pg_swap->pse_va, 0);
@@ -438,19 +600,144 @@ struct page_info *page_swap_in(struct env *env, void *va){
     // *pte |= PTE_P;
     page_insert(pg_swap->pse_env->env_pgdir, res, pg_swap->pse_va, (*pte & 0xFFF));
     pg_swap = pg_swap->pse_next;
+    //tlb_invalidate(pg_swap->pse_env->env_pgdir, pg_swap->pse_va);
   }
   res->pp_pse = swap_env_map[slot_i];
   swap_env_map[slot_i] = 0;
   swap_slots[slot_i] = 0;
-  cprintf("KSWAPD: SWAPPED IN PAGE %d from slot_i= %d\n", res - pages, slot_i * PGSIZE / SECTSIZE);
-  // for(int i = 0 ; i < PGSIZE - 1; ++i)
+// for(int i = 0 ; i < PGSIZE - 1; ++i)
   //   cprintf("%02x ",((char*)page2kva(res))[i]);
   // cprintf("END\n");
 release:
+  cprintf("KSWAPD: SWAPPED IN PAGE\n");
+
+  unlock_env();
   spin_unlock(&pg_swap_lock);
   return res;
 }
 
+
+void direct_page_reclaim(){
+  struct env *tmp;
+	pte_t *pte;
+	void* va;
+	struct page_info *pp;
+  //lock_env();
+  cprintf("DIRECT PAGE RECLAIMING\n");
+  tmp = env_run_list;
+  struct page_info *min_pp = NULL;
+  while(tmp){
+    if(tmp->env_type == ENV_TYPE_KERNEL){
+      tmp = tmp->env_link;
+      continue;
+    }
+    struct vma *vma = tmp->env_mm.mm_vma;
+    while(vma){
+      //spin_lock(&tmp->env_mm.mm_lock);
+      va = vma->vma_va;
+      for(; va < (vma->vma_va + vma->vma_len);){
+        pte = pgdir_walk(tmp->env_pgdir, va, 0);
+        if(!pte || !(*pte & PTE_P)){
+          va += PGSIZE;
+          continue;
+        }
+        int pg_size = (*pte & PTE_PS)? PGSIZE : HUGE_PGSIZE;
+        pp = pa2page(PTE_ADDR(*pte));
+        pp->pp_lru_counter = ((*pte & PTE_A)? 1 : 0) <<
+         (sizeof(pp->pp_lru_counter) - 1) ||
+         (pp->pp_lru_counter >> 1);
+        if(!min_pp || pp->pp_lru_counter < min_pp->pp_lru_counter){
+          min_pp = pp;
+        }
+        *pte &= ~PTE_A;
+        va += pg_size;
+      }
+      vma = vma->vma_next;
+      //spin_unlock(&tmp->env_mm.mm_lock);
+    }
+     tmp = tmp->env_link;
+  }
+  if(min_pp)
+    __page_swap_out_nonblocking(min_pp);
+  else{
+    oom_kill_default();
+  }
+  //unlock_env();
+  cprintf("DIRECT PAGE RECLAIMING FINISHED\n");
+}
+
+void kswapd(void *arg){
+	struct env *tmp;
+	pte_t *pte;
+	void* va;
+	struct page_info *pp;
+	//kernel_thread_sleep(10000000);
+	while(1){
+		lock_env();
+		tmp = env_run_list;
+		while(tmp){
+			if(tmp->env_type == ENV_TYPE_KERNEL){
+				tmp = tmp->env_link;
+				continue;
+			}
+			struct vma *vma = tmp->env_mm.mm_vma;
+			while(vma){
+				spin_lock(&tmp->env_mm.mm_lock);
+				va = vma->vma_va;
+				for(; va < (vma->vma_va + vma->vma_len);){
+					pte = pgdir_walk(tmp->env_pgdir, va, 0);
+					if(!pte || !(*pte & PTE_P)){
+						va += PGSIZE;
+						continue;
+					}
+					int pg_size = (*pte & PTE_PS)? PGSIZE : HUGE_PGSIZE;
+					pp = pa2page(PTE_ADDR(*pte));
+					pp->pp_lru_counter = ((*pte & PTE_A)? 1 : 0) <<
+					 (sizeof(pp->pp_lru_counter) - 1) ||
+					 (pp->pp_lru_counter >> 1);
+					if(!pp->pp_lru_counter){
+						page_swap_out(tmp, pp);
+            tmp->env_mm.mm_pf_count -= PGSIZE;
+					}
+					*pte &= ~PTE_A;
+					va += pg_size;
+				}
+				vma = vma->vma_next;
+				spin_unlock(&tmp->env_mm.mm_lock);
+			}
+			 tmp = tmp->env_link;
+		}
+	sleep:
+		unlock_env();
+		kernel_thread_sleep(10000000);
+	}
+}
+
+void __kswapd(void* arg){
+  while(true){
+    //spin_lock(&sqe_lock);
+    if(sqe_fifo){
+      struct swap_queue_entry *tmp = sqe_fifo;
+      sqe_fifo = sqe_fifo->sqe_next;
+      if(tmp->sqe_va){
+        // SWAP IN
+        __page_swap_in(tmp->sqe_env, tmp->sqe_va);
+        lock_env();
+        tmp->sqe_env->env_link = env_run_list;
+        env_run_list = tmp->sqe_env;
+        tmp->sqe_env->env_status = ENV_RUNNABLE;
+        unlock_env();
+      } else {
+        // SWAP OUT
+        cprintf("SWAP OUT %p\n", tmp->sqe_pp);
+        __page_swap_out(tmp->sqe_pp);
+      }
+      sqe_free(tmp);
+    }
+    //spin_unlock(&sqe_lock);
+    kernel_thread_desched();
+  }
+}
 
 void __add_to_clock_list(struct page_info *pp){
 	// CLOCK FOR PAGE REPLACEMENTS
@@ -489,8 +776,9 @@ struct page_info *page_alloc(int alloc_flags)
 		extern pde_t entry_pgdir[];
 		pde_t *curr_pgdir;
 		int _pgsize = alloc_flags & ALLOC_HUGE? HUGE_PGSIZE : PGSIZE;
-		lock_pagealloc();
-		if(alloc_flags & ALLOC_PREMAPPED){
+  beg:
+    lock_pagealloc();
+    if(alloc_flags & ALLOC_PREMAPPED){
 			result = page_free_list;
 			while(result){
 				if(page2pa(result) >= 0x0 && page2pa(result) < PADDR((void*)premapped_rbound)){
@@ -536,7 +824,11 @@ struct page_info *page_alloc(int alloc_flags)
 			if(page2pa(result) < PADDR((void*)premapped_rbound))
 				memset(page2kva(result), 0x0, _pgsize);
 	release:
-		unlock_pagealloc();
+    unlock_pagealloc();
+    if(!result){
+      direct_page_reclaim();
+      goto beg;
+    }
     return result;
 }
 

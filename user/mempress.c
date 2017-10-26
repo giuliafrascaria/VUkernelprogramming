@@ -18,8 +18,9 @@ void umain(int argc, char **argv)
     PRINT("Memory of size %d bytes set to: %x\n", MEM_BLOCK_SIZE, gigs[10]);
 
     /* Read every page so that they get swapped back again */
-    for(i = 37; i < MEM_BLOCK_SIZE; i+= PGSIZE) { 
+    for(i = 37; i < MEM_BLOCK_SIZE; i+= PGSIZE) {
         assert(gigs[i] == (char) 0xd0);
+        sys_cputs("%d STEPS REMAINING \n", MEM_BLOCK_SIZE - i);
     }
 
     PRINT("mempress successful.\n");

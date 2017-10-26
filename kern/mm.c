@@ -17,12 +17,12 @@ int vma_map(struct mm_struct *mm, void* va){
 	int res = 0;
 
 	spin_lock(&mm->mm_lock);
-	//lock_env();
+	lock_env();
 	if(!vma){
 		res = -1;
 		goto ret;
 	}
-
+	cprintf("VMA_MAP_BEG\n");
 	env = container_of(mm, struct env, env_mm);
 	pte = pgdir_walk(env->env_pgdir, va, 0);
 	perm = __prot2perm(vma->vma_prot);
@@ -70,7 +70,8 @@ int vma_map(struct mm_struct *mm, void* va){
 release:
 	mm->mm_pf_count += pg_size / PGSIZE;
 ret:
-	//unlock_env();
+	cprintf("VMA_MAP_FIN\n");
+	unlock_env();
 	spin_unlock(&mm->mm_lock);
 	return res;
 }

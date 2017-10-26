@@ -49,7 +49,4 @@ static inline void ide_start_write(uint32_t secno, size_t nsectors)
 void ide_read_sector(char *dst);
 void ide_write_sector(char *src);
 
-void ide_write_page(size_t, char*);
-void ide_read_page(size_t, char*);
-
 #endif

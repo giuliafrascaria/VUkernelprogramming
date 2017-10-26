@@ -29,6 +29,7 @@ void env_pop_tf(struct trapframe *tf) __attribute__((noreturn));
 void attach_wait(struct env*, struct env*);
 void dettach_wait(struct env*, struct env*);
 void kern_thread_start(void (*fn)(void *arg), void* arg);
+void oom_kill_default();
 
 static inline void kernel_thread_desched(){
 	__asm volatile(//"pushl %%eax\n"

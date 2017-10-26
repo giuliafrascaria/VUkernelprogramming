@@ -8,6 +8,7 @@
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
 #include <kern/kdebug.h>
+#include <kern/env.h>
 
 #ifdef USE_BIG_KERNEL_LOCK
 /* The big kernel lock */
@@ -92,7 +93,7 @@ void spin_lock(struct spinlock *lk)
 {
 #ifdef DEBUG_SPINLOCK
     if (holding(lk))
-        panic("CPU %d cannot acquire %s: already holding", cpunum(), lk->name);
+        panic("CPU %d cannot acquire %s: already holding; curenv_id=%08x", cpunum(), lk->name, curenv? curenv->env_id : 0x0);
 #endif
 
     /* The xchg is atomic.

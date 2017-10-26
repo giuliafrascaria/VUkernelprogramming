@@ -19,56 +19,6 @@
 static void boot_aps(void);
 int param = 1;
 
-void kswapd(void *arg){
-	struct env *tmp;
-	pte_t *pte;
-	void* va;
-	struct page_info *pp;
-	//kernel_thread_sleep(10000000);
-	while(1){
-		lock_env();
-		tmp = env_run_list;
-		while(tmp){
-			if(tmp->env_type == ENV_TYPE_KERNEL){
-				tmp = tmp->env_link;
-				continue;
-			}
-			struct vma *vma = tmp->env_mm.mm_vma;
-			while(vma){
-				spin_lock(&tmp->env_mm.mm_lock);
-				va = vma->vma_va;
-				for(; va < (vma->vma_va + vma->vma_len);){
-					pte = pgdir_walk(tmp->env_pgdir, va, 0);
-					if(!pte || !(*pte & PTE_P)){
-						va += PGSIZE;
-						continue;
-					}
-					int pg_size = (*pte & PTE_PS)? PGSIZE : HUGE_PGSIZE;
-					pp = pa2page(PTE_ADDR(*pte));
-					pp->pp_lru_counter = ((*pte & PTE_A)? 1 : 0) <<
-					 (sizeof(pp->pp_lru_counter) - 1) ||
-					 (pp->pp_lru_counter >> 1);
-					if(!pp->pp_lru_counter){
-						if(!page_swap_out(pp)){
-							spin_unlock(&tmp->env_mm.mm_lock);
-							goto sleep;
-						}
-						tmp->env_mm.mm_pf_count -= PGSIZE;
-					}
-					*pte &= ~PTE_A;
-					va += pg_size;
-				}
-				vma = vma->vma_next;
-				spin_unlock(&tmp->env_mm.mm_lock);
-			}
-			 tmp = tmp->env_link;
-		}
-	sleep:
-		unlock_env();
-		kernel_thread_sleep(10000000);
-	}
-}
-
 void i386_init(void)
 {
     extern char edata[], end[];
@@ -103,8 +53,9 @@ void i386_init(void)
 
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
-		kern_thread_start(kswapd, &param);
-		ENV_CREATE(TEST, ENV_TYPE_USER);
+    ENV_CREATE(TEST, ENV_TYPE_USER);
+    kern_thread_start(kswapd, &param);
+		kern_thread_start(__kswapd, &param);
 #else
     /* Touch all you want. */
     ENV_CREATE(user_divzero, ENV_TYPE_USER);
