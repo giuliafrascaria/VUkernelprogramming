@@ -321,8 +321,8 @@ void page_fault_handler(struct trapframe *tf)
 		/* Read processor's CR2 register to find the faulting address */
 	  fault_va = rcr2();
 
-		cprintf("[%08x] user fault va %08x ip %08x\n",
-				curenv->env_id, fault_va, tf->tf_eip);
+		cprintf("[%08x] user fault va %08x ip %08x   curenv_id=%08x\n",
+				curenv->env_id, fault_va, tf->tf_eip, curenv->env_id);
 		//print_trapframe(tf);
 
 		if(tf->tf_cs == GD_KT)

@@ -103,11 +103,13 @@ void user_mem_assert(struct env *env, const void *va, size_t len, int perm);
 struct pg_swap_entry *pgswap_alloc();
 void pgswap_free(struct pg_swap_entry*);
 
-void page_swap_out(struct env*, struct page_info*);
+void page_swap_out(struct page_info*);
 void page_swap_in(struct env*, void *va);
 
 void kswapd(void *arg);
 void __kswapd(void *arg);
+void __add_to_clock_list(struct page_info *pp);
+void __remove_from_clock_list(struct page_info *pp);
 
 static inline physaddr_t page2pa(struct page_info *pp)
 {

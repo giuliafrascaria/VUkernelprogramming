@@ -54,6 +54,7 @@ void i386_init(void)
 #if defined(TEST)
     /* Don't touch -- used by grading script! */
     ENV_CREATE(TEST, ENV_TYPE_USER);
+  //  ENV_CREATE(TEST, ENV_TYPE_USER);
     kern_thread_start(kswapd, &param);
 		kern_thread_start(__kswapd, &param);
 #else

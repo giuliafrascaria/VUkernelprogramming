@@ -109,6 +109,23 @@ void spin_lock(struct spinlock *lk)
 #endif
 }
 
+int try_spin_lock(struct spinlock *lk){
+#ifdef DEBUG_SPINLOCK
+  if (holding(lk))
+    return -1;
+#endif
+
+  while (xchg(&lk->locked, 1) != 0)
+         asm volatile ("pause");
+
+     /* Record info about lock acquisition for debugging. */
+ #ifdef DEBUG_SPINLOCK
+     lk->cpu = thiscpu;
+     get_caller_pcs(lk->pcs);
+ #endif
+ return 0;
+}
+
 /*
  * Release the lock.
  */

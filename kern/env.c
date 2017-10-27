@@ -336,11 +336,12 @@ void region_alloc(struct env *e, void *va, size_t len, int perm){
 			 pp = page_alloc(ALLOC_PREMAPPED | ALLOC_ZERO);
 			 if(!pp)
 			 	goto no_memory;
-     if(curenv == e){
+     if(curenv == e && e->env_type != ENV_TYPE_KERNEL){
            pg_swap = pgswap_alloc();
            pg_swap->pse_env = e;
            pg_swap->pse_va = va + page_i * PGSIZE;
            pp->pp_pse = pg_swap;
+           __add_to_clock_list(pp);
      }
 			 page_insert(e->env_pgdir, pp, va + page_i * PGSIZE, perm);
 		 	}
@@ -352,8 +353,13 @@ void region_alloc(struct env *e, void *va, size_t len, int perm){
 }
 
 void region_dealloc(struct env *e, void* va, size_t len){
-	for(size_t page_i = 0; page_i < len; page_i += PGSIZE){
-		page_remove(e->env_pgdir, va + page_i);
+  struct page_info *pp = NULL;
+  for(size_t page_i = 0; page_i < len; page_i += PGSIZE){
+    pp = page_lookup(e->env_pgdir, va + page_i, NULL);
+    if(pp){
+      __remove_from_clock_list(pp);
+      page_remove(e->env_pgdir, va + page_i);
+    }
 	}
 }
 
@@ -496,23 +502,33 @@ void env_free(struct env *e)
 
 	        /* Unmap all PTEs in this page table */
 	        for (pteno = 0; pteno <= PTX(~0); pteno++) {
-	            if (pt[pteno] & PTE_P)
-	                page_remove(e->env_pgdir, PGADDR(pdeno, pteno, 0));
+	            if (pt[pteno] & PTE_P){
+                struct page_info *pp = page_lookup(e->env_pgdir, PGADDR(pdeno, pteno, 0), NULL);
+                __remove_from_clock_list(pp);
+                struct pg_swap_entry *pse = pp->pp_pse, *tmp;
+                while(pse->pse_env != e){
+                  pse = pse->pse_next;
+                }
+                page_remove(e->env_pgdir, PGADDR(pdeno, pteno, 0));
+                remove_entry_from_list(struct pg_swap_entry, pse, pp->pp_pse, pse_next);
+              }
 	        }
 
 	        /* Free the page table itself */
 	        e->env_pgdir[pdeno] = 0;
 	        page_decref(pa2page(pa));
+          __remove_from_clock_list(pa2page(pa));
 	    }
-
 	    /* Free the page directory */
 	    pa = PADDR(e->env_pgdir);
 	    e->env_pgdir = 0;
 	    page_decref(pa2page(pa));
+      __remove_from_clock_list(pa2page(pa));
 	    /* Free VMA list. */
 	    pa = PADDR(e->env_mm.mm_common_vma);
 	    e->env_mm.mm_common_vma = 0;
 	    page_decref(pa2page(pa));
+      __remove_from_clock_list(pa2page(pa));
 			/* Free all waiting envs */
 			struct env *tmp = e->env_wait_list;
 			while(tmp){
@@ -522,8 +538,12 @@ void env_free(struct env *e)
 			}
 		} else if(e->env_type == ENV_TYPE_KERNEL){
 			page_decref(pa2page(PADDR((void*)ROUNDDOWN(e->env_tf.tf_esp, PGSIZE))));
+      __remove_from_clock_list(pa2page(PADDR((void*)ROUNDDOWN(e->env_tf.tf_esp, PGSIZE))));
 		}
-
+    struct page_info *pp = page_alloc(ALLOC_PREMAPPED);
+    cprintf("TEST AFTER FREEING %p\n", pp);
+    if(pp)
+      page_free(pp);
     /* return the environment to the free list */
     e->env_status = ENV_FREE;
 		remove_entry_from_list(struct env, e, env_run_list, env_link);
@@ -787,23 +807,33 @@ release:
 
 
 void oom_kill_default(){
-	struct env *tmp = env_run_list, *good_env = tmp;
+	struct env *tmp = envs, *good_env = tmp;
 	struct vma *vma;
+  int locked = try_spin_lock(&env_lock);
 	while(tmp){
-		if(tmp->env_mm.mm_pf_count < good_env->env_mm.mm_pf_count)
+    if(tmp->env_type == ENV_TYPE_KERNEL || tmp->env_status == ENV_FREE){
+      ++tmp;
+      continue;
+    }
+		if(tmp->env_mm.mm_pf_count < good_env->env_mm.mm_pf_count ||
+    (good_env->env_type == ENV_TYPE_KERNEL))
 			good_env = tmp;
-		tmp = tmp->env_link;
+		++tmp;
 	}
 
-	if(!good_env)
+	if(!good_env ||  good_env->env_type == ENV_TYPE_KERNEL)
 		goto release;
   unlock_env();
   cprintf(" OOM KILLER: KILLING ENV[%08x]\n", good_env->env_id);
 	env_destroy(good_env);
+  if(curenv == good_env)
+    sched_yield();
 	// vma = good_env->env_mm.mm_vma;
 	// while(vma){
 	// 	region_dealloc(good_env, vma->vma_va, vma->vma_len);
 	// }
-	release:
+release:
+  if(!locked)
+    spin_unlock(&env_lock);
   return;
 }

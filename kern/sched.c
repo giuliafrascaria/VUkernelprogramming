@@ -36,7 +36,8 @@ void sched_yield(void)
      * LAB 5: Your code here.
      */
 		 env = curenv && curenv->env_link? curenv->env_link : env_run_list;
-
+    //  if(runnable_envs == 2)
+    //   goto halt;
 		 if(curenv && (read_tsc() - curenv->env_ts) < DEFAULT_ENV_TS)
 			 env = curenv; // Continue doing current env
 
@@ -80,7 +81,7 @@ void sched_halt(void)
     for (i = 0; i < NENV; i++) {
         if ((envs[i].env_status == ENV_RUNNABLE ||
              envs[i].env_status == ENV_RUNNING ||
-             envs[i].env_status == ENV_DYING) && (envs[i].env_type == ENV_TYPE_USER) )
+             envs[i].env_status == ENV_DYING))
             break;
     }
 		/* Release the big kernel lock as if we were "leaving" the kernel */

@@ -20,7 +20,6 @@ void umain(int argc, char **argv)
     /* Read every page so that they get swapped back again */
     for(i = 37; i < MEM_BLOCK_SIZE; i+= PGSIZE) {
         assert(gigs[i] == (char) 0xd0);
-        sys_cputs("%d STEPS REMAINING \n", MEM_BLOCK_SIZE - i);
     }
 
     PRINT("mempress successful.\n");
